@@ -5,6 +5,7 @@ pub mod cleanup;
 pub mod diagnostic;
 pub mod error;
 pub mod htmd_backend;
+mod htmd_handlers;
 pub mod options;
 pub mod result;
 pub mod rewrite;

@@ -7,8 +7,8 @@ use scraper::{Html, Node, Selector};
 use crate::diagnostic::{Diagnostic, DiagnosticsCollector};
 use crate::error::{Error, Result};
 use crate::options::{
-    ConversionOptions, CustomElementPolicy, DetailsHandling, FormHandling, HiddenContentPolicy,
-    ImageMode, MediaPolicy, TitleHandling,
+    ConversionOptions, CustomElementPolicy, CustomRuleAction, DetailsHandling, DifficultTableStrategy,
+    FormHandling, HiddenContentPolicy, ImageMode, MediaPolicy, TableHandling, TitleHandling,
 };
 use crate::rewrite::rewrite_url_attr;
 
@@ -30,14 +30,18 @@ pub fn clean_html(
 
     remove_hidden(&mut document, options);
     apply_remove_tags(&mut document, options);
+    apply_footnote_cleanup(&mut document, options);
     apply_per_tag_behavior(&mut document, options);
     apply_remove_selectors(&mut document, options, path, diagnostics)?;
     apply_unwrap_selectors(&mut document, options, path, diagnostics)?;
     apply_keep_only(&mut document, options, path, diagnostics)?;
+    apply_custom_rules(&mut document, options, path, diagnostics)?;
     apply_details_handling(&mut document, options);
     apply_form_handling(&mut document, options);
     apply_custom_elements(&mut document, options);
+    apply_table_handling(&mut document, options);
     apply_media_policy(&mut document, options);
+    apply_code_language_detection(&mut document, options);
     apply_image_handling(&mut document, options);
     apply_url_rewriting(&mut document, options, diagnostics)?;
 
@@ -94,10 +98,31 @@ fn check_limits(
 
 fn apply_remove_tags(document: &mut Html, options: &ConversionOptions) {
     for tag in &options.cleanup.remove_tags {
-        let Ok(selector) = Selector::parse(tag) else {
+        let selector_str = if tag.eq_ignore_ascii_case("script") && options.semantic.math.enabled {
+            r#"script:not([type^="math/"]):not([type^="text/asciimath"])"#
+        } else {
+            tag
+        };
+        let Ok(selector) = Selector::parse(selector_str) else {
             continue;
         };
         detach_selected(document, &selector);
+    }
+}
+
+fn apply_footnote_cleanup(document: &mut Html, options: &ConversionOptions) {
+    if !options.semantic.footnotes {
+        return;
+    }
+    let selectors = [".footnotes ol", ".footnote-list", "ol.footnotes"];
+    for s in selectors {
+        let Ok(selector) = Selector::parse(s) else {
+            continue;
+        };
+        let ids: Vec<NodeId> = document.select(&selector).map(|e| e.id()).collect();
+        for id in ids {
+            unwrap_node(document, id);
+        }
     }
 }
 
@@ -389,6 +414,22 @@ fn apply_image_handling(document: &mut Html, options: &ConversionOptions) {
             _ => {}
         }
     }
+}
+
+fn extract_language(class_value: &str, patterns: &[String]) -> Option<String> {
+    for pat in patterns {
+        if let Ok(re) = regex::Regex::new(pat) {
+            if let Some(caps) = re.captures(class_value) {
+                if let Some(m) = caps.name("lang").or_else(|| caps.get(1)) {
+                    let lang = m.as_str().to_string();
+                    if !lang.is_empty() {
+                        return Some(lang);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn promote_lazy_image(document: &mut Html, id: NodeId, options: &ConversionOptions) {
@@ -765,6 +806,293 @@ fn apply_per_tag_behavior(document: &mut Html, options: &ConversionOptions) {
             _ => {}
         }
     }
+}
+
+// --- Phase 3: custom rules, mermaid, tables, language detection ---
+
+fn apply_custom_rules(
+    document: &mut Html,
+    options: &ConversionOptions,
+    path: Option<&str>,
+    diagnostics: &mut dyn DiagnosticsCollector,
+) -> Result<()> {
+    if options.extension.custom_rules.is_empty() {
+        return Ok(());
+    }
+
+    let mut rules: Vec<_> = options.extension.custom_rules.iter().enumerate().collect();
+    rules.sort_by(|a, b| {
+        b.1.priority
+            .cmp(&a.1.priority)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    for (index, rule) in rules {
+        for selector_str in &rule.selectors {
+            let selector = match Selector::parse(selector_str) {
+                Ok(s) => s,
+                Err(e) => {
+                    let mut d = Diagnostic::warning(format!(
+                        "invalid custom rule selector {selector_str}: {e}"
+                    ))
+                    .with_rule(index.to_string());
+                    if let Some(p) = path {
+                        d = d.with_path(p);
+                    }
+                    diagnostics.push(d);
+                    if options.strict {
+                        return Err(Error::Selector(format!(
+                            "invalid custom rule selector {selector_str}: {e}"
+                        )));
+                    }
+                    continue;
+                }
+            };
+
+            let ids: Vec<NodeId> = document.select(&selector).map(|e| e.id()).collect();
+            for id in ids {
+                match rule.action {
+                    CustomRuleAction::Drop => {
+                        if let Some(mut node) = document.tree.get_mut(id) {
+                            node.detach();
+                        }
+                    }
+                    CustomRuleAction::Unwrap => unwrap_node(document, id),
+                    CustomRuleAction::Text => replace_with_inner_text(document, id),
+                    CustomRuleAction::Html => {}
+                        CustomRuleAction::MarkdownTemplate
+                    | CustomRuleAction::FencedBlock
+                    | CustomRuleAction::Link
+                    | CustomRuleAction::Image => {
+                        // These actions produce raw Markdown syntax and are handled
+                        // by the backend's element handlers so the output is not
+                        // escaped by the Markdown text formatter.
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn apply_table_handling(document: &mut Html, options: &ConversionOptions) {
+    let Ok(table_sel) = Selector::parse("table") else {
+        return;
+    };
+    let ids: Vec<NodeId> = document.select(&table_sel).map(|e| e.id()).collect();
+
+    for id in ids {
+        let is_complex = is_complex_table(document, id);
+        let handling = match options.semantic.table_handling {
+            TableHandling::Gfm if is_complex => match options.semantic.difficult_table_strategy {
+                DifficultTableStrategy::HtmlFallback => TableHandling::HtmlFallback,
+                _ => TableHandling::Flatten,
+            },
+            TableHandling::Gfm => TableHandling::Gfm,
+            other => other,
+        };
+
+        match handling {
+            TableHandling::Gfm => {}
+            TableHandling::HtmlFallback => html_fallback_table(document, id),
+            TableHandling::Flatten => flatten_table(document, id),
+            TableHandling::CsvLike => csv_like_table(document, id),
+            TableHandling::Drop => {
+                if let Some(mut node) = document.tree.get_mut(id) {
+                    node.detach();
+                }
+            }
+        }
+    }
+}
+
+fn is_complex_table(document: &Html, id: NodeId) -> bool {
+    let Some(el) = document.tree.get(id).and_then(scraper::ElementRef::wrap) else {
+        return false;
+    };
+    // Nested tables are always complex.
+    if el.select(&Selector::parse("table table").unwrap()).next().is_some() {
+        return true;
+    }
+
+    let mut row_lengths = Vec::new();
+    for row in el.select(&Selector::parse("tr").unwrap()) {
+        let cells = row.select(&Selector::parse("td, th").unwrap()).count();
+        let has_span = row
+            .select(&Selector::parse("[rowspan], [colspan]").unwrap())
+            .next()
+            .is_some();
+        if has_span {
+            return true;
+        }
+        row_lengths.push(cells);
+    }
+
+    if row_lengths.len() < 2 {
+        return false;
+    }
+    let first = row_lengths[0];
+    row_lengths.iter().any(|&len| len != first || len == 0)
+}
+
+fn flatten_table(document: &mut Html, id: NodeId) {
+    let text = document
+        .tree
+        .get(id)
+        .and_then(scraper::ElementRef::wrap)
+        .map(|el| {
+            let mut lines = Vec::new();
+            for row in el.select(&Selector::parse("tr").unwrap()) {
+                let cells: Vec<String> = row
+                    .select(&Selector::parse("td, th").unwrap())
+                    .map(|c| c.text().collect::<String>().trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if !cells.is_empty() {
+                    lines.push(cells.join(" | "));
+                }
+            }
+            lines.join("\n\n")
+        })
+        .unwrap_or_default();
+
+    if text.is_empty() {
+        if let Some(mut node) = document.tree.get_mut(id) {
+            node.detach();
+        }
+    } else {
+        replace_with_text(document, id, &format!("\n\n{text}\n\n"));
+    }
+}
+
+fn csv_like_table(document: &mut Html, id: NodeId) {
+    let Some(mut node) = document.tree.get_mut(id) else {
+        return;
+    };
+    let Node::Element(ref mut el) = *node.value() else {
+        return;
+    };
+    set_attr(el, "data-htmlmd-table", "csv");
+}
+
+fn html_fallback_table(document: &mut Html, id: NodeId) {
+    let Some(mut node) = document.tree.get_mut(id) else {
+        return;
+    };
+    let Node::Element(ref mut el) = *node.value() else {
+        return;
+    };
+    set_attr(el, "data-htmlmd-table", "html");
+}
+
+fn apply_code_language_detection(document: &mut Html, options: &ConversionOptions) {
+    if options.semantic.code_language_patterns.is_empty() && !options.semantic.detect_languages {
+        return;
+    }
+
+    let Ok(code_sel) = Selector::parse("pre code, code") else {
+        return;
+    };
+
+    let ids: Vec<NodeId> = document.select(&code_sel).map(|e| e.id()).collect();
+    for id in ids {
+        let pre_class = document
+            .tree
+            .get(id)
+            .and_then(|n| n.parent())
+            .and_then(|p| p.value().as_element())
+            .filter(|el| el.name().eq_ignore_ascii_case("pre"))
+            .and_then(|el| el.attrs.iter().find(|(n, _)| n.local.as_ref() == "class"))
+            .map(|(_, v)| v.to_string());
+
+        let code_class = document
+            .tree
+            .get(id)
+            .and_then(|n| n.value().as_element())
+            .and_then(|el| el.attrs.iter().find(|(n, _)| n.local.as_ref() == "class"))
+            .map(|(_, v)| v.to_string());
+
+        let source = code_class.as_deref().unwrap_or("");
+        let mut lang = extract_language(source, &options.semantic.code_language_patterns)
+            .or_else(|| {
+                extract_language(
+                    pre_class.as_deref().unwrap_or(""),
+                    &options.semantic.code_language_patterns,
+                )
+            });
+
+        if lang.is_none() && options.semantic.detect_languages {
+            let text = code_text(document, id);
+            lang = detect_language_from_code(&text).map(|s| s.to_string());
+        }
+
+        if let Some(lang) = lang {
+            let Some(mut node) = document.tree.get_mut(id) else {
+                continue;
+            };
+            let Node::Element(ref mut el) = *node.value() else {
+                continue;
+            };
+            set_attr(el, "class", &format!("language-{lang}"));
+        }
+    }
+}
+
+fn code_text(document: &Html, id: NodeId) -> String {
+    document
+        .tree
+        .get(id)
+        .map(|n| node_text(&n))
+        .unwrap_or_default()
+}
+
+fn detect_language_from_code(text: &str) -> Option<&'static str> {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+
+    static RULES: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
+        vec![
+            (Regex::new(r#"(?m)^\s*<\?php\b"#).unwrap(), "php"),
+            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+(?:python3?|python)\b"#).unwrap(), "python"),
+            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/python"#).unwrap(), "python"),
+            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+(?:node|nodejs)\b"#).unwrap(), "javascript"),
+            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+ruby\b"#).unwrap(), "ruby"),
+            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+perl\b"#).unwrap(), "perl"),
+            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+lua\b"#).unwrap(), "lua"),
+            (Regex::new(r#"(?m)^\s*#!\s*/bin/(?:bash|sh)\b"#).unwrap(), "shell"),
+            (Regex::new(r#"(?m)^\s*#!\s*/bin/zsh\b"#).unwrap(), "shell"),
+            (Regex::new(r#"(?m)^\s*<!DOCTYPE\s+html\b"#).unwrap(), "html"),
+            (Regex::new(r#"(?m)^\s*<\?xml\b"#).unwrap(), "xml"),
+            (Regex::new(r#"(?m)^\s*<html\b"#).unwrap(), "html"),
+            (Regex::new(r#"(?m)^\s*package\s+main\s*$"#).unwrap(), "go"),
+            (Regex::new(r#"(?m)^\s*func\s+\w+\s*\("#).unwrap(), "go"),
+            (Regex::new(r#"(?m)^\s*fn\s+\w+\s*\("#).unwrap(), "rust"),
+            (Regex::new(r#"(?m)^\s*pub\s+fn\s+\w+\s*\("#).unwrap(), "rust"),
+            (Regex::new(r#"(?m)^\s*#include\s*[<\"][^>\"]*\.hpp[>\"]|std::"#).unwrap(), "cpp"),
+            (Regex::new(r#"(?m)^\s*#include\s*[<\"]"#).unwrap(), "c"),
+            (Regex::new(r#"(?m)^\s*def\s+\w+\s*\("#).unwrap(), "python"),
+            (Regex::new(r#"(?m)^\s*class\s+\w+\s*\{[^}]*System\.out"#).unwrap(), "java"),
+            (Regex::new(r#"(?m)^\s*console\.log\("#).unwrap(), "javascript"),
+            (Regex::new(r#"(?m)^\s*document\."#).unwrap(), "javascript"),
+            (Regex::new(r#"(?m)^\s*SELECT\s+[\w*]+\s+FROM\s+\w+"#).unwrap(), "sql"),
+            (Regex::new(r#"(?m)^\s*\$\("#).unwrap(), "shell"),
+            (Regex::new(r#"(?m)^\s*echo\s+"#).unwrap(), "shell"),
+            (Regex::new(r#"(?m)^\s*using\s+System"#).unwrap(), "cs"),
+            (Regex::new(r#"(?m)^\s*@import\s+"#).unwrap(), "css"),
+            (Regex::new(r#"(?m)^\s*\{\s*[\"']"#).unwrap(), "json"),
+            (Regex::new(r#"(?m)^\s*\[\s*[\"']"#).unwrap(), "json"),
+            (Regex::new(r#"(?m)^\s*\{\s*\}\s*$"#).unwrap(), "json"),
+            (Regex::new(r#"(?m)^\s*<\w+[^>]*>"#).unwrap(), "html"),
+        ]
+    });
+
+    for (re, lang) in RULES.iter() {
+        if re.is_match(text) {
+            return Some(lang);
+        }
+    }
+    None
 }
 
 // --- low-level DOM helpers ---

@@ -16,6 +16,8 @@ parallel = ["rayon"]
 htmd = { workspace = true }
 scraper = { workspace = true }
 markup5ever = { workspace = true }
+html5ever = { workspace = true }
+markup5ever_rcdom = "0.38.0"
 ego-tree = { workspace = true }
 url = { workspace = true }
 serde = { workspace = true }

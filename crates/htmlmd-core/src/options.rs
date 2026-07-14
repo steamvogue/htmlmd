@@ -777,6 +777,9 @@ pub struct SemanticOptions {
     pub table_handling: TableHandling,
     pub difficult_table_strategy: DifficultTableStrategy,
     pub code_language_patterns: Vec<String>,
+    /// Try to infer a code-block language from the source text when no
+    /// `language-*` class is present.
+    pub detect_languages: bool,
     pub inline_style_subset: InlineStyleSubset,
     pub semantic_tags: SemanticTagPolicy,
     pub definition_lists: bool,
@@ -800,6 +803,7 @@ impl Default for SemanticOptions {
                 r"lang-(?P<lang>\S+)".to_string(),
                 r"highlight-(?P<lang>\S+)".to_string(),
             ],
+            detect_languages: true,
             inline_style_subset: InlineStyleSubset::Basic,
             semantic_tags: SemanticTagPolicy::Convert,
             definition_lists: false,
@@ -868,6 +872,11 @@ impl ConversionOptions {
             semantic: crate::options::SemanticOptions {
                 footnotes: true,
                 definition_lists: true,
+                math: MathOptions {
+                    enabled: true,
+                    output: MathOutput::InlineDollar,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Self::gfm()

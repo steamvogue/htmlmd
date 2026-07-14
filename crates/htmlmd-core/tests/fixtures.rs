@@ -2,7 +2,10 @@
 
 use htmlmd_core::{
     convert, ConversionOptions,
-    options::{DetailsHandling, FormHandling, ImageMode, MediaPolicy},
+    options::{
+        CustomRule, CustomRuleAction, DetailsHandling, DifficultTableStrategy, FormHandling,
+        ImageMode, MediaPolicy, MermaidPolicy, TableHandling,
+    },
 };
 use std::fs;
 
@@ -183,4 +186,131 @@ fn media_placeholder() {
     let md = convert(html, &opts).unwrap().markdown;
     eprintln!("MEDIA MD: {:?}", md);
     assert!(md.contains("(VIDEO: x.mp4)"));
+}
+
+
+#[test]
+fn extended_profile_semantic_features() {
+    let md = fixture("extended", &ConversionOptions::extended());
+    eprintln!("EXTENDED MD:\n{md}");
+    assert!(md.contains("==important=="));
+    assert!(md.contains("~~removed~~"));
+    assert!(md.contains("++added++"));
+    assert!(md.contains("H~2~O"));
+    assert!(md.contains("E=mc^2^"));
+    assert!(md.contains("<kbd>Ctrl</kbd>"));
+    assert!(md.contains("[^1]"));
+    assert!(md.contains("[^1]: Footnote text."));
+    assert!(md.contains("Term\n: Definition text."));
+    assert!(md.contains("$E=mc^2$"));
+    assert!(md.contains("> [!NOTE]"));
+    assert!(md.contains("> This is an alert."));
+}
+
+#[test]
+fn code_language_detection() {
+    let md = fixture("code_detection", &ConversionOptions::extended());
+    eprintln!("CODE DETECTION MD:\n{md}");
+    assert!(md.contains("```go"));
+    assert!(md.contains("```python"));
+    assert!(md.contains("```rust"));
+    assert!(md.contains("```shell"));
+}
+
+#[test]
+fn mermaid_to_fenced() {
+    let mut opts = ConversionOptions::extended();
+    opts.semantic.mermaid = MermaidPolicy::Fenced;
+    let md = fixture("mermaid", &opts);
+    eprintln!("MERMAID MD:\n{md}");
+    assert!(md.contains("```mermaid"));
+    assert!(md.contains("graph TD;"));
+    assert!(md.contains("sequenceDiagram;"));
+}
+
+#[test]
+fn complex_table_html_fallback() {
+    let mut opts = ConversionOptions::extended();
+    opts.semantic.difficult_table_strategy = DifficultTableStrategy::HtmlFallback;
+    let md = fixture("complex_table", &opts);
+    eprintln!("TABLE HTML FALLBACK MD:\n{md}");
+    assert!(md.contains("```html"));
+    assert!(md.contains("<table>"));
+}
+
+#[test]
+fn complex_table_flatten() {
+    let mut opts = ConversionOptions::extended();
+    opts.semantic.table_handling = TableHandling::Flatten;
+    let md = fixture("complex_table", &opts);
+    eprintln!("TABLE FLATTEN MD:\n{md}");
+    assert!(!md.contains("| A | B |"));
+    assert!(md.contains("A | B"));
+    assert!(md.contains("1 | 2"));
+}
+
+#[test]
+fn complex_table_csv_like() {
+    let mut opts = ConversionOptions::extended();
+    opts.semantic.table_handling = TableHandling::CsvLike;
+    let md = fixture("complex_table", &opts);
+    eprintln!("TABLE CSV MD:\n{md}");
+    assert!(md.contains("```csv"));
+    assert!(md.contains("A,B"));
+}
+
+#[test]
+fn custom_rules_drop_and_template() {
+    let mut opts = ConversionOptions::extended();
+    opts.extension.custom_rules = vec![
+        CustomRule {
+            selectors: vec![".ad".to_string()],
+            action: CustomRuleAction::Drop,
+            template: None,
+            priority: 0,
+        },
+        CustomRule {
+            selectors: vec!["span.badge".to_string()],
+            action: CustomRuleAction::MarkdownTemplate,
+            template: Some("**{text}**".to_string()),
+            priority: 0,
+        },
+        CustomRule {
+            selectors: vec!["pre.tilde".to_string()],
+            action: CustomRuleAction::FencedBlock,
+            template: Some("txt".to_string()),
+            priority: 0,
+        },
+    ];
+    let html = "<p>Hello <span class='badge'>NEW</span> <span class='ad'>Ad</span></p><pre class='tilde'>some code</pre>";
+    let md = convert(html, &opts).unwrap().markdown;
+    eprintln!("CUSTOM RULES MD:\n{md}");
+    assert!(!md.contains("Ad"));
+    assert!(md.contains("**NEW**"));
+    assert!(md.contains("```txt"));
+    assert!(md.contains("some code"));
+}
+
+#[test]
+fn custom_rules_link_and_image() {
+    let mut opts = ConversionOptions::extended();
+    opts.extension.custom_rules = vec![
+        CustomRule {
+            selectors: vec!["a.custom-link".to_string()],
+            action: CustomRuleAction::Link,
+            template: None,
+            priority: 0,
+        },
+        CustomRule {
+            selectors: vec!["img.custom-img".to_string()],
+            action: CustomRuleAction::Image,
+            template: None,
+            priority: 0,
+        },
+    ];
+    let html = "<a class='custom-link' href='https://example.com'>Example</a><img class='custom-img' src='pic.png' alt='Pic'>";
+    let md = convert(html, &opts).unwrap().markdown;
+    eprintln!("CUSTOM LINK IMAGE MD:\n{md}");
+    assert!(md.contains("[Example](https://example.com/)"));
+    assert!(md.contains("![Pic](pic.png)"));
 }
