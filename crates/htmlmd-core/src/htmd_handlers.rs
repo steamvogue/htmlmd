@@ -19,9 +19,10 @@ use std::rc::Rc;
 use crate::error::{Error, Result};
 use crate::options::{
     BulletMarker, CodeFence, ConversionOptions, CustomRule, CustomRuleAction, HardBreakStyle,
-    HeadingStyle, HrStyle as HtmlMdHrStyle, LinkStyle as HtmlMdLinkStyle, MathOutput,
+    HeadingStyle, HrStyle as HtmlMdHrStyle, ImageMode, LinkStyle as HtmlMdLinkStyle, MathOutput,
     MermaidPolicy, OutputProfile, RawHtmlPolicy, ReferencePlacement,
 };
+use std::sync::{Arc, Mutex};
 
 /// Build a fully configured `HtmlToMarkdown` converter from `ConversionOptions`.
 pub fn build_converter(options: &ConversionOptions) -> HtmlToMarkdown {
@@ -45,6 +46,7 @@ pub fn build_converter(options: &ConversionOptions) -> HtmlToMarkdown {
     builder = add_mermaid_handlers(builder, options);
     builder = add_alert_handlers(builder, options);
     builder = add_wikilink_handlers(builder, options);
+    builder = add_reference_handlers(builder, options);
     builder = add_custom_rule_handlers(builder, options);
 
     builder.build()
@@ -785,6 +787,215 @@ fn inline_wrap(
 
 fn faithful_with_attrs(handlers: &dyn Handlers, element: &Element<'_>) -> bool {
     handlers.options().translation_mode == TranslationMode::Faithful && !element.attrs.is_empty()
+}
+
+// ---------------------------------------------------------------------------
+// Reference links / images
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct ReferenceState {
+    pending: Vec<String>,
+    counter: usize,
+}
+
+fn next_reference_id(state: &Mutex<ReferenceState>) -> usize {
+    let mut st = state.lock().unwrap();
+    st.counter += 1;
+    st.counter
+}
+
+fn add_reference_handlers(
+    mut builder: HtmlToMarkdownBuilder,
+    options: &ConversionOptions,
+) -> HtmlToMarkdownBuilder {
+    let link_ref = matches!(
+        options.render.link_style,
+        HtmlMdLinkStyle::Reference
+            | HtmlMdLinkStyle::CollapsedReference
+            | HtmlMdLinkStyle::ShortcutReference
+    );
+    let image_ref = options.cleanup.image_mode == ImageMode::Reference;
+    let placement = options.render.reference_placement;
+
+    if !link_ref && !image_ref {
+        return builder;
+    }
+
+    // For End placement, links are already handled by htmd's anchor handler.
+    // Images still need a custom handler because htmd has no reference image support.
+    let state = Arc::new(Mutex::new(ReferenceState::default()));
+
+    if link_ref && placement != ReferencePlacement::End {
+        builder = builder.add_handler(
+            vec!["a"],
+            ReferenceLinkHandler {
+                state: Arc::clone(&state),
+                placement,
+            },
+        );
+    }
+
+    if image_ref {
+        builder = builder.add_handler(
+            vec!["img"],
+            ReferenceImageHandler {
+                state: Arc::clone(&state),
+                placement,
+            },
+        );
+    }
+
+    if placement == ReferencePlacement::SectionEnd {
+        builder = builder.add_handler(
+            vec!["h1", "h2", "h3", "h4", "h5", "h6"],
+            HeadingFlushHandler { state },
+        );
+    }
+
+    builder
+}
+
+#[derive(Clone)]
+struct ReferenceLinkHandler {
+    state: Arc<Mutex<ReferenceState>>,
+    placement: ReferencePlacement,
+}
+
+impl htmd::element_handler::ElementHandler for ReferenceLinkHandler {
+    fn handle(&self, handlers: &dyn Handlers, element: Element<'_>) -> Option<HandlerResult> {
+        let mut href: Option<String> = None;
+        let mut title: Option<String> = None;
+        for attr in element.attrs.iter() {
+            match attr.name.local.as_ref() {
+                "href" => href = Some(attr.value.to_string()),
+                "title" => title = Some(attr.value.to_string()),
+                _ => {}
+            }
+        }
+        let Some(href) = href else {
+            return Some(handlers.walk_children(element.node));
+        };
+
+        let text = handlers
+            .walk_children(element.node)
+            .content
+            .trim()
+            .replace(']', "\\]");
+        let id = format!("ref{}", next_reference_id(&self.state));
+        let definition = match title {
+            Some(t) if !t.is_empty() => format!("[{id}]: {href} \"{t}\""),
+            _ => format!("[{id}]: {href}"),
+        };
+
+        let inline = format!("[{text}][{id}]");
+        match self.placement {
+            ReferencePlacement::Adjacent => {
+                Some(format!("{inline}\n\n{definition}\n\n").into())
+            }
+            ReferencePlacement::SectionEnd | ReferencePlacement::End => {
+                self.state.lock().unwrap().pending.push(definition);
+                Some(inline.into())
+            }
+        }
+    }
+
+    fn append(&self) -> Option<String> {
+        if self.placement == ReferencePlacement::Adjacent {
+            return None;
+        }
+        let defs = {
+            let mut st = self.state.lock().unwrap();
+            std::mem::take(&mut st.pending)
+        };
+        if defs.is_empty() {
+            None
+        } else {
+            Some(format!("\n\n{}\n\n", defs.join("\n")))
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ReferenceImageHandler {
+    state: Arc<Mutex<ReferenceState>>,
+    placement: ReferencePlacement,
+}
+
+impl htmd::element_handler::ElementHandler for ReferenceImageHandler {
+    fn handle(&self, handlers: &dyn Handlers, element: Element<'_>) -> Option<HandlerResult> {
+        let mut src: Option<String> = None;
+        let mut alt: Option<String> = None;
+        let mut title: Option<String> = None;
+        for attr in element.attrs.iter() {
+            match attr.name.local.as_ref() {
+                "src" => src = Some(attr.value.to_string()),
+                "alt" => alt = Some(attr.value.to_string()),
+                "title" => title = Some(attr.value.to_string()),
+                _ => {}
+            }
+        }
+        let Some(src) = src else {
+            return handlers.fallback(element);
+        };
+
+        let alt = alt.unwrap_or_default().replace(']', "\\]");
+        let id = format!("img{}", next_reference_id(&self.state));
+        let definition = match title {
+            Some(t) if !t.is_empty() => format!("[{id}]: {src} \"{t}\""),
+            _ => format!("[{id}]: {src}"),
+        };
+
+        let inline = format!("![{alt}][{id}]");
+        match self.placement {
+            ReferencePlacement::Adjacent => {
+                Some(format!("{inline}\n\n{definition}\n\n").into())
+            }
+            ReferencePlacement::SectionEnd | ReferencePlacement::End => {
+                self.state.lock().unwrap().pending.push(definition);
+                Some(inline.into())
+            }
+        }
+    }
+
+    fn append(&self) -> Option<String> {
+        if self.placement == ReferencePlacement::Adjacent {
+            return None;
+        }
+        let defs = {
+            let mut st = self.state.lock().unwrap();
+            std::mem::take(&mut st.pending)
+        };
+        if defs.is_empty() {
+            None
+        } else {
+            Some(format!("\n\n{}\n\n", defs.join("\n")))
+        }
+    }
+}
+
+#[derive(Clone)]
+struct HeadingFlushHandler {
+    state: Arc<Mutex<ReferenceState>>,
+}
+
+impl htmd::element_handler::ElementHandler for HeadingFlushHandler {
+    fn handle(&self, handlers: &dyn Handlers, element: Element<'_>) -> Option<HandlerResult> {
+        if handlers.options().translation_mode == TranslationMode::Faithful && !element.attrs.is_empty()
+        {
+            return handlers.fallback(element);
+        }
+        let defs = {
+            let mut st = self.state.lock().unwrap();
+            std::mem::take(&mut st.pending)
+        };
+        let heading = handlers.fallback(element)?.content;
+        if defs.is_empty() {
+            Some(heading.into())
+        } else {
+            Some(format!("\n\n{}\n\n{}", defs.join("\n"), heading).into())
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

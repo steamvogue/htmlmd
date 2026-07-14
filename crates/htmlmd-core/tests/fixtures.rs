@@ -4,7 +4,7 @@ use htmlmd_core::{
     convert, ConversionOptions,
     options::{
         CustomRule, CustomRuleAction, DetailsHandling, DifficultTableStrategy, FormHandling,
-        ImageMode, MediaPolicy, MermaidPolicy, TableHandling,
+        ImageMode, LinkStyle, MediaPolicy, MermaidPolicy, ReferencePlacement, TableHandling,
     },
 };
 use std::fs;
@@ -377,4 +377,79 @@ fn plain_text_profile_strips_markdown() {
     assert!(md.contains("diagram"));
     assert!(md.contains("one"));
     assert!(md.contains("two"));
+}
+
+#[test]
+fn reference_links_adjacent() {
+    let mut opts = ConversionOptions::default();
+        opts.render.link_style = LinkStyle::Reference;
+        opts.render.reference_placement = ReferencePlacement::Adjacent;
+        opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
+    let html = "<p><a href='https://a.com'>A</a> and <a href='https://b.com' title='B site'>B</a></p>";
+    let md = convert(html, &opts).unwrap().markdown;
+    eprintln!("REF ADJACENT MD:\n{md}");
+    assert!(md.contains("[A][ref1]"));
+    assert!(md.contains("[ref1]: https://a.com"));
+    assert!(md.contains("[B][ref2]"));
+    assert!(md.contains("[ref2]: https://b.com/ \"B site\""));
+}
+
+#[test]
+fn reference_links_section_end() {
+    let mut opts = ConversionOptions::default();
+        opts.render.link_style = LinkStyle::Reference;
+        opts.render.reference_placement = ReferencePlacement::SectionEnd;
+        opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
+    let html = "<p><a href='https://a.com'>A</a></p><h2>Next</h2><p><a href='https://b.com'>B</a></p>";
+    let md = convert(html, &opts).unwrap().markdown;
+    eprintln!("REF SECTION MD:\n{md}");
+    assert!(md.contains("[A][ref1]"));
+    assert!(md.contains("[B][ref2]"));
+    assert!(md.contains("[ref1]: https://a.com"));
+    assert!(md.contains("[ref2]: https://b.com"));
+    // The first definition should appear before the second heading.
+    let pos_def1 = md.find("[ref1]: https://a.com").unwrap();
+    let pos_heading = md.find("## Next").unwrap();
+    assert!(pos_def1 < pos_heading);
+}
+
+#[test]
+fn reference_images() {
+    let mut opts = ConversionOptions::default();
+        opts.cleanup.image_mode = ImageMode::Reference;
+        opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
+    let html = "<p><img src='a.png' alt='A'><img src='b.png' alt='B' title='pic'></p>";
+    let md = convert(html, &opts).unwrap().markdown;
+    eprintln!("REF IMAGES MD:\n{md}");
+    assert!(md.contains("![A][img1]"));
+    assert!(md.contains("![B][img2]"));
+    assert!(md.contains("[img1]: a.png"));
+    assert!(md.contains("[img2]: b.png \"pic\""));
+}
+
+#[test]
+fn limit_max_output_bytes_errors_in_strict_mode() {
+    let mut opts = ConversionOptions::default();
+    opts.limits.max_output_bytes = 1;
+    opts.strict = true;
+    let err = convert("<h1>Hello world</h1>", &opts).unwrap_err();
+    assert!(err.to_string().contains("output size"));
+}
+
+#[test]
+fn limit_max_dom_depth_errors_in_strict_mode() {
+    let mut opts = ConversionOptions::default();
+    opts.limits.max_dom_depth = 1;
+    opts.strict = true;
+    let err = convert("<div><p><span>deep</span></p></div>", &opts).unwrap_err();
+    assert!(err.to_string().contains("DOM depth"));
+}
+
+#[test]
+fn limit_max_attribute_len_errors_in_strict_mode() {
+    let mut opts = ConversionOptions::default();
+    opts.limits.max_attribute_len = 2;
+    opts.strict = true;
+    let err = convert("<p data-x='verylongvalue'>text</p>", &opts).unwrap_err();
+    assert!(err.to_string().contains("attribute length"));
 }

@@ -63,6 +63,20 @@ pub fn convert_with_backend<B: ConverterBackend + ?Sized>(
 
     apply_profile_post_processing(&mut result, options);
 
+    if options.limits.max_output_bytes > 0
+        && result.markdown.len() as u64 > options.limits.max_output_bytes
+    {
+        let msg = format!(
+            "output size {} exceeds limit {}",
+            result.markdown.len(),
+            options.limits.max_output_bytes
+        );
+        if options.strict {
+            return Err(Error::LimitExceeded(msg));
+        }
+        result.diagnostics.push(Diagnostic::warning(msg));
+    }
+
     if options.strict && result.has_errors() {
         return Err(Error::Other("conversion produced errors in strict mode".to_string()));
     }

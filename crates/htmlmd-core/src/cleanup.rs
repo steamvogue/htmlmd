@@ -93,7 +93,57 @@ fn check_limits(
             diagnostics.push(Diagnostic::warning(msg));
         }
     }
+    if limits.max_dom_depth > 0 {
+        let depth = max_dom_depth(document);
+        if depth > limits.max_dom_depth {
+            let msg = format!("DOM depth {depth} exceeds limit {}", limits.max_dom_depth);
+            if options.strict {
+                return Err(Error::LimitExceeded(msg));
+            }
+            diagnostics.push(Diagnostic::warning(msg));
+        }
+    }
+    if limits.max_attribute_len > 0 {
+        let attr_len = max_attribute_len(document);
+        if attr_len > limits.max_attribute_len {
+            let msg = format!(
+                "attribute length {attr_len} exceeds limit {}",
+                limits.max_attribute_len
+            );
+            if options.strict {
+                return Err(Error::LimitExceeded(msg));
+            }
+            diagnostics.push(Diagnostic::warning(msg));
+        }
+    }
     Ok(())
+}
+
+fn max_dom_depth(document: &Html) -> u32 {
+    fn depth(node: NodeRef<'_, Node>, current: u32) -> u32 {
+        let mut max = current;
+        for child in node.children() {
+            max = max.max(depth(child, current + 1));
+        }
+        max
+    }
+    document
+        .tree
+        .root()
+        .children()
+        .map(|c| depth(c, 1))
+        .max()
+        .unwrap_or(0)
+}
+
+fn max_attribute_len(document: &Html) -> u64 {
+    document
+        .tree
+        .nodes()
+        .filter_map(|n| n.value().as_element())
+        .flat_map(|el| el.attrs.iter().map(|(_, v)| v.len() as u64))
+        .max()
+        .unwrap_or(0)
 }
 
 fn apply_remove_tags(document: &mut Html, options: &ConversionOptions) {
