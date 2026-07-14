@@ -314,3 +314,67 @@ fn custom_rules_link_and_image() {
     assert!(md.contains("[Example](https://example.com/)"));
     assert!(md.contains("![Pic](pic.png)"));
 }
+
+#[test]
+fn obsidian_profile_wikilinks_and_frontmatter() {
+    let mut opts = ConversionOptions::obsidian();
+    opts.cleanup.metadata.title = true;
+    opts.cleanup.metadata.description = true;
+    opts.cleanup.metadata.canonical_url = true;
+    let html = r#"<!DOCTYPE html>
+<html><head><title>My Note</title>
+<meta name="description" content="A note about things">
+<link rel="canonical" href="https://example.com/note">
+</head><body>
+<p>See <a class="wikilink" href="Another page">another note</a>.</p>
+</body></html>"#;
+    let md = convert(html, &opts).unwrap().markdown;
+    eprintln!("OBSIDIAN MD:\n{md}");
+    assert!(md.contains("---"));
+    assert!(md.contains("title: My Note"));
+    assert!(md.contains("description: A note about things"));
+    assert!(md.contains("canonical_url: https://example.com/note"));
+    assert!(md.contains("[[Another page|another note]]"));
+}
+
+#[test]
+fn pandoc_profile_preserves_raw_html() {
+    let md = convert("<p>Press <kbd>Ctrl</kbd>.</p>", &ConversionOptions::pandoc())
+        .unwrap()
+        .markdown;
+    eprintln!("PANDOC MD:\n{md}");
+    assert!(md.contains("<kbd>Ctrl</kbd>"));
+}
+
+#[test]
+fn mdx_safe_profile_escapes_jsx() {
+    let md = convert(
+        "<p>Press <kbd>Ctrl</kbd> and use {config.value}.</p>",
+        &ConversionOptions::mdx_safe(),
+    )
+    .unwrap()
+    .markdown;
+    eprintln!("MDX SAFE MD:\n{md}");
+    assert!(!md.contains("<kbd>"));
+    assert!(md.contains("Ctrl"));
+    assert!(md.contains(r"\{config.value\}"));
+}
+
+#[test]
+fn plain_text_profile_strips_markdown() {
+    let html = "<h1>Title</h1><p>A <em>simple</em> <a href='https://example.com'>link</a> and <img src='x.png' alt='diagram'>.</p><ul><li>one</li><li>two</li></ul>";
+    let md = convert(html, &ConversionOptions::plain_text())
+        .unwrap()
+        .markdown;
+    eprintln!("PLAIN TEXT MD:\n{md}");
+    assert!(!md.contains('#'));
+    assert!(!md.contains('*'));
+    assert!(!md.contains('['));
+    assert!(!md.contains('!'));
+    assert!(md.contains("Title"));
+    assert!(md.contains("simple"));
+    assert!(md.contains("link"));
+    assert!(md.contains("diagram"));
+    assert!(md.contains("one"));
+    assert!(md.contains("two"));
+}

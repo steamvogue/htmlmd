@@ -883,6 +883,44 @@ impl ConversionOptions {
         }
     }
 
+    /// Create options for the Pandoc profile.
+    pub fn pandoc() -> Self {
+        let mut opts = Self::extended();
+        opts.profile = OutputProfile::Pandoc;
+        opts.render.raw_html_policy = RawHtmlPolicy::Faithful;
+        opts.render.smart_punctuation = SmartPunctuation::Normalize;
+        opts
+    }
+
+    /// Create options for the Obsidian profile.
+    pub fn obsidian() -> Self {
+        let mut opts = Self::extended();
+        opts.profile = OutputProfile::Obsidian;
+        opts.render.raw_html_policy = RawHtmlPolicy::Preserve;
+        opts
+    }
+
+    /// Create options for the MDX-safe profile.
+    pub fn mdx_safe() -> Self {
+        let mut opts = Self::extended();
+        opts.profile = OutputProfile::MdxSafe;
+        opts.render.raw_html_policy = RawHtmlPolicy::Escape;
+        opts.render.comment_policy = CommentPolicy::Drop;
+        opts.render.escaping_mode = EscapingMode::Strict;
+        opts
+    }
+
+    /// Create options for the plain-text profile.
+    pub fn plain_text() -> Self {
+        let mut opts = Self {
+            profile: OutputProfile::PlainText,
+            ..Default::default()
+        };
+        opts.render.raw_html_policy = RawHtmlPolicy::Drop;
+        opts.cleanup.image_mode = ImageMode::AltText;
+        opts
+    }
+
     /// Validate the options value. Returns `Err` on the first configuration problem.
     pub fn validate(&self) -> crate::Result<()> {
         validation::validate(self)

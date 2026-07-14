@@ -44,6 +44,7 @@ pub fn build_converter(options: &ConversionOptions) -> HtmlToMarkdown {
     builder = add_math_handlers(builder, options);
     builder = add_mermaid_handlers(builder, options);
     builder = add_alert_handlers(builder, options);
+    builder = add_wikilink_handlers(builder, options);
     builder = add_custom_rule_handlers(builder, options);
 
     builder.build()
@@ -120,11 +121,18 @@ fn add_semantic_handlers(
     let profile = options.profile;
     let gfm_plus = matches!(
         profile,
-        OutputProfile::Gfm | OutputProfile::Extended | OutputProfile::Pandoc | OutputProfile::Obsidian
+        OutputProfile::Gfm
+            | OutputProfile::Extended
+            | OutputProfile::Pandoc
+            | OutputProfile::Obsidian
+            | OutputProfile::MdxSafe
     );
     let extended = matches!(
         profile,
-        OutputProfile::Extended | OutputProfile::Pandoc | OutputProfile::Obsidian
+        OutputProfile::Extended
+            | OutputProfile::Pandoc
+            | OutputProfile::Obsidian
+            | OutputProfile::MdxSafe
     );
 
     if gfm_plus {
@@ -138,12 +146,16 @@ fn add_semantic_handlers(
             .add_handler(vec!["ins"], ins_handler)
             .add_handler(vec!["sub"], sub_handler)
             .add_handler(vec!["sup"], sup_handler)
-            .add_handler(vec!["kbd"], kbd_handler)
             .add_handler(vec!["samp", "var"], code_like_handler)
             .add_handler(vec!["q"], q_handler)
             .add_handler(vec!["cite"], cite_handler)
             .add_handler(vec!["abbr", "time"], unwrap_handler)
             .add_handler(vec!["address"], address_handler);
+
+        // <kbd> emits raw HTML; keep it out of MDX-safe output.
+        if profile != OutputProfile::MdxSafe {
+            builder = builder.add_handler(vec!["kbd"], kbd_handler);
+        }
     }
 
     builder
@@ -707,6 +719,44 @@ fn is_alert_title(node: &Rc<Node>) -> bool {
         .borrow()
         .iter()
         .any(|a| a.name.local.as_ref() == "class" && a.value.contains("markdown-alert-title"))
+}
+
+// ---------------------------------------------------------------------------
+// Obsidian wikilinks
+// ---------------------------------------------------------------------------
+
+fn add_wikilink_handlers(
+    mut builder: HtmlToMarkdownBuilder,
+    options: &ConversionOptions,
+) -> HtmlToMarkdownBuilder {
+    if options.profile != OutputProfile::Obsidian {
+        return builder;
+    }
+    builder = builder.add_handler(vec!["a"], wikilink_handler);
+    builder
+}
+
+fn wikilink_handler(h: &dyn Handlers, e: Element<'_>) -> Option<HandlerResult> {
+    let is_wikilink = e.attrs.iter().any(|a| {
+        (a.name.local.as_ref() == "class"
+            && a.value.split_whitespace().any(|c| c == "wikilink"))
+            || (a.name.local.as_ref() == "rel" && a.value.as_ref() == "wikilink")
+    });
+    if !is_wikilink {
+        return h.fallback(e);
+    }
+    let target = e
+        .attrs
+        .iter()
+        .find(|a| a.name.local.as_ref() == "href")
+        .map(|a| a.value.to_string())
+        .unwrap_or_default();
+    let display = h.walk_children(e.node).content.trim().to_string();
+    if display.is_empty() || display == target {
+        Some(format!("[[{target}]]").into())
+    } else {
+        Some(format!("[[{target}|{display}]]").into())
+    }
 }
 
 // ---------------------------------------------------------------------------

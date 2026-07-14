@@ -61,6 +61,8 @@ pub fn convert_with_backend<B: ConverterBackend + ?Sized>(
     result.canonical_url = metadata.canonical_url.or(result.canonical_url);
     result.diagnostics.extend(diagnostics);
 
+    apply_profile_post_processing(&mut result, options);
+
     if options.strict && result.has_errors() {
         return Err(Error::Other("conversion produced errors in strict mode".to_string()));
     }
@@ -91,6 +93,77 @@ pub fn convert_with_backend_to_writer<B: ConverterBackend + ?Sized>(
     Ok(())
 }
 
+
+fn apply_profile_post_processing(result: &mut ConversionResult, options: &ConversionOptions) {
+    match options.profile {
+        crate::options::OutputProfile::Obsidian => {
+            if let Some(frontmatter) = build_obsidian_frontmatter(result) {
+                result.markdown = format!("{frontmatter}\n{}", result.markdown);
+            }
+        }
+        crate::options::OutputProfile::PlainText => {
+            result.markdown = strip_markdown(&result.markdown);
+        }
+        crate::options::OutputProfile::MdxSafe => {
+            result.markdown = escape_mdx(&result.markdown);
+        }
+        _ => {}
+    }
+}
+
+fn build_obsidian_frontmatter(result: &ConversionResult) -> Option<String> {
+    let mut lines = Vec::new();
+    if let Some(title) = &result.title {
+        lines.push(format!("title: {title}"));
+    }
+    if let Some(description) = &result.description {
+        lines.push(format!("description: {description}"));
+    }
+    if let Some(url) = &result.canonical_url {
+        lines.push(format!("canonical_url: {url}"));
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    Some(format!("---\n{}\n---", lines.join("\n")))
+}
+
+fn escape_mdx(text: &str) -> String {
+    // Escape curly braces, which MDX interprets as JSX expressions.
+    text.replace('{', "\\{").replace('}', "\\}")
+}
+
+fn strip_markdown(text: &str) -> String {
+    use regex::Regex;
+
+    let mut s = text.to_string();
+
+    // Headings: remove ATX markers.
+    s = Regex::new(r"(?m)^#{1,6}\s+").unwrap().replace_all(&s, "").to_string();
+    // Blockquote markers.
+    s = Regex::new(r"(?m)^>\s?").unwrap().replace_all(&s, "").to_string();
+    // List bullets / ordered markers.
+    s = Regex::new(r"(?m)^[-*+]\s+").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"(?m)^\d+\.\s+").unwrap().replace_all(&s, "").to_string();
+    // Fenced code blocks.
+    s = Regex::new(r"```[\s\S]*?```").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"~~~[\s\S]*?~~~").unwrap().replace_all(&s, "").to_string();
+    // Inline code.
+    s = Regex::new(r"`([^`]+)`").unwrap().replace_all(&s, "$1").to_string();
+    // Images -> alt text.
+    s = Regex::new(r"!\[([^\]]*)\]\([^)]*\)").unwrap().replace_all(&s, "$1").to_string();
+    // Links -> link text.
+    s = Regex::new(r"\[([^\]]+)\]\([^)]*\)").unwrap().replace_all(&s, "$1").to_string();
+    // Emphasis / highlight / insert / strike / sub / sup markers.
+    for marker in ["**", "__", "*", "_", "~~", "==", "++", "^", "~"] {
+        s = s.replace(marker, "");
+    }
+    // Horizontal rules.
+    s = Regex::new(r"(?m)^---+\s*$").unwrap().replace_all(&s, "").to_string();
+
+    // Collapse multiple blank lines.
+    Regex::new(r"\n{3,}").unwrap().replace_all(s.trim(), "\n\n").to_string()
+}
 
 #[cfg(test)]
 mod tests {
