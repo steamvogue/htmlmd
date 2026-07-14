@@ -8,6 +8,15 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Command-line interface for htmlmd, the fast HTML to Markdown converter."
 
+[package.metadata.deb]
+maintainer = "htmlmd contributors"
+copyright = "2026, htmlmd contributors"
+extended-description = """\
+  A fast, configurable HTML-to-Markdown converter \
+  with multiple output profiles."""
+section = "utils"
+priority = "optional"
+
 [[bin]]
 name = "htmlmd"
 path = "src/main.rs"

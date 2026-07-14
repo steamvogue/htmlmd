@@ -77,6 +77,14 @@ pub struct Cli {
     #[arg(long, value_enum)]
     pub link_style: Option<LinkStyleArg>,
 
+    /// Reference link/image definition placement.
+    #[arg(long, value_enum)]
+    pub reference_placement: Option<ReferencePlacementArg>,
+
+    /// Image rendering mode.
+    #[arg(long, value_enum)]
+    pub image_mode: Option<ImageModeArg>,
+
     /// Code fence delimiter.
     #[arg(long, value_enum)]
     pub code_fence: Option<CodeFenceArg>,
@@ -120,6 +128,18 @@ pub struct Cli {
     /// Strict mode: turn warnings into errors.
     #[arg(long)]
     pub strict: bool,
+
+    /// Extract the document title from `<title>`.
+    #[arg(long)]
+    pub metadata_title: bool,
+
+    /// Extract the document description from `meta[name="description"]`.
+    #[arg(long)]
+    pub metadata_description: bool,
+
+    /// Extract the canonical URL from `link[rel="canonical"]`.
+    #[arg(long)]
+    pub metadata_canonical_url: bool,
 
     /// Number of parallel jobs. 0 means use all CPUs.
     #[arg(short, long)]
@@ -184,6 +204,21 @@ pub enum LinkStyleArg {
     Reference,
     CollapsedReference,
     ShortcutReference,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum ReferencePlacementArg {
+    End,
+    SectionEnd,
+    Adjacent,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum ImageModeArg {
+    Inline,
+    Reference,
+    Skip,
+    AltText,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

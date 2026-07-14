@@ -272,3 +272,179 @@ fn dry_run_does_not_write() {
     cmd.assert().success();
     assert!(out_dir.path().read_dir().unwrap().next().is_none());
 }
+
+#[test]
+fn profile_extended() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--profile", "extended"])
+        .arg(fixture_dir().join("extended.html"));
+    cmd.assert().success().stdout(contains("==important=="));
+}
+
+#[test]
+fn profile_obsidian_frontmatter_and_wikilink() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("obsidian.html");
+    fs::write(
+        &input,
+        "<!doctype html><html><head>\
+         <title>My Note</title>\
+         <meta name=\"description\" content=\"A note\">\
+         </head><body>\
+         <p><a class=\"wikilink\" href=\"Another page\">another note</a></p>\
+         </body></html>",
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args([
+        "--profile",
+        "obsidian",
+        "--metadata-title",
+        "--metadata-description",
+    ])
+    .arg(&input);
+    cmd.assert()
+        .success()
+        .stdout(contains("---"))
+        .stdout(contains("title: My Note"))
+        .stdout(contains("description: A note"))
+        .stdout(contains("[[Another page|another note]]"));
+}
+
+#[test]
+fn profile_plain_text() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--profile", "plain-text"])
+        .arg(fixture_dir().join("basic.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("# Hello World").not())
+        .stdout(contains("Hello World"));
+}
+
+#[test]
+fn metadata_flags_extract_title() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--metadata-title", "--metadata-description"])
+        .arg(fixture_dir().join("metadata.html"));
+    cmd.assert().success();
+}
+
+
+#[test]
+fn link_style_reference() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--link-style", "reference"])
+        .arg(fixture_dir().join("links.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("[Relative link][1]"))
+        .stdout(contains("[1]: /page"));
+}
+
+#[test]
+fn reference_placement_adjacent() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--link-style", "reference", "--reference-placement", "adjacent"])
+        .arg(fixture_dir().join("links.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("[ref1]: /page"))
+        .stdout(contains("[ref2]: https://example.com/page"));
+}
+
+#[test]
+fn reference_placement_section_end() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("refs.html");
+    fs::write(
+        &input,
+        "<h1>Section A</h1><p><a href=\"/a\">link a</a></p>\
+         <h2>Section B</h2><p><a href=\"/b\">link b</a></p>",
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--link-style", "reference", "--reference-placement", "section-end"])
+        .arg(&input);
+    cmd.assert()
+        .success()
+        .stdout(contains("[ref1]: /a"))
+        .stdout(contains("[ref2]: /b"));
+}
+
+#[test]
+fn image_mode_reference() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--image-mode", "reference"])
+        .arg(fixture_dir().join("image_mode.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("![Photo][img1]"))
+        .stdout(contains("[img1]: a.jpg"))
+        .stdout(contains("[img2]: b.png"));
+}
+
+#[test]
+fn image_mode_skip() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--image-mode", "skip"])
+        .arg(fixture_dir().join("image_mode.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("Photo").not())
+        .stdout(contains("Diagram").not());
+}
+
+#[test]
+fn image_mode_alt_text() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--image-mode", "alt-text"])
+        .arg(fixture_dir().join("image_mode.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("Photo"))
+        .stdout(contains("Diagram"))
+        .stdout(contains("![").not());
+}
+
+#[test]
+fn profile_pandoc_preserves_raw_html() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--profile", "pandoc"])
+        .arg(fixture_dir().join("extended.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("==important=="))
+        .stdout(contains("<div class=\"footnotes\">"));
+}
+
+#[test]
+fn profile_mdx_safe_escapes_braces() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("mdx.html");
+    fs::write(&input, "<p>Hello {world}</p>").unwrap();
+
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args(["--profile", "mdx-safe"]).arg(&input);
+    cmd.assert().success().stdout(contains(r#"\{world\}"#));
+}
+
+#[test]
+fn metadata_canonical_url_flag() {
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.args([
+        "--profile",
+        "obsidian",
+        "--metadata-title",
+        "--metadata-description",
+        "--metadata-canonical-url",
+    ])
+    .arg(fixture_dir().join("metadata.html"));
+    cmd.assert()
+        .success()
+        .stdout(contains("title: Page Title"))
+        .stdout(contains("description: Page description"))
+        .stdout(contains("canonical_url: https://example.com/page"));
+}

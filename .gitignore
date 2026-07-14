@@ -1,2 +1,30 @@
+# Rust build artifacts
 /target
+
+# Release binaries directory (built locally, not committed)
+/releases
+/htmlmd
+/htmlmd-server
+
+# Rust backup files
+**/*.rs.bk
+
+# Windows debug symbols
+*.pdb
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE files
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local environment files
+.env
+.env.local
+
+# Insta snapshot update leftovers
 *.snap.new

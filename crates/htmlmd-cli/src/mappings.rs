@@ -3,7 +3,8 @@
 use htmlmd_core::options as core;
 
 use crate::cli::{
-    BrStyleArg, BulletArg, CodeFenceArg, HeadingStyleArg, HrStyleArg, LinkStyleArg, ProfileArg,
+    BrStyleArg, BulletArg, CodeFenceArg, HeadingStyleArg, HrStyleArg, ImageModeArg, LinkStyleArg,
+    ProfileArg, ReferencePlacementArg,
 };
 
 impl From<HeadingStyleArg> for core::HeadingStyle {
@@ -66,6 +67,27 @@ impl From<ProfileArg> for core::OutputProfile {
             ProfileArg::Obsidian => Self::Obsidian,
             ProfileArg::MdxSafe => Self::MdxSafe,
             ProfileArg::PlainText => Self::PlainText,
+        }
+    }
+}
+
+impl From<ReferencePlacementArg> for core::ReferencePlacement {
+    fn from(v: ReferencePlacementArg) -> Self {
+        match v {
+            ReferencePlacementArg::End => Self::End,
+            ReferencePlacementArg::SectionEnd => Self::SectionEnd,
+            ReferencePlacementArg::Adjacent => Self::Adjacent,
+        }
+    }
+}
+
+impl From<ImageModeArg> for core::ImageMode {
+    fn from(v: ImageModeArg) -> Self {
+        match v {
+            ImageModeArg::Inline => Self::Inline,
+            ImageModeArg::Reference => Self::Reference,
+            ImageModeArg::Skip => Self::Skip,
+            ImageModeArg::AltText => Self::AltText,
         }
     }
 }

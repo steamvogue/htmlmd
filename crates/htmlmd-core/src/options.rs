@@ -921,6 +921,82 @@ impl ConversionOptions {
         opts
     }
 
+    /// Apply profile-specific defaults when an option is still at its generic default.
+    ///
+    /// This is used by the CLI/config loader so that selecting a profile like
+    /// `extended` or `obsidian` also enables the matching semantic features.
+    pub fn apply_profile_defaults(&mut self) {
+        let semantic_defaults = SemanticOptions::default();
+        let render_defaults = RenderOptions::default();
+        let cleanup_defaults = CleanupOptions::default();
+
+        match self.profile {
+            OutputProfile::Extended
+            | OutputProfile::Pandoc
+            | OutputProfile::Obsidian
+            | OutputProfile::MdxSafe => {
+                if self.semantic.footnotes == semantic_defaults.footnotes {
+                    self.semantic.footnotes = true;
+                }
+                if self.semantic.definition_lists == semantic_defaults.definition_lists {
+                    self.semantic.definition_lists = true;
+                }
+                if self.semantic.math == semantic_defaults.math {
+                    self.semantic.math = MathOptions {
+                        enabled: true,
+                        output: MathOutput::InlineDollar,
+                        ..Default::default()
+                    };
+                }
+            }
+            OutputProfile::Gfm => {
+                if self.semantic.task_lists == semantic_defaults.task_lists {
+                    self.semantic.task_lists = true;
+                }
+                if self.semantic.table_handling == semantic_defaults.table_handling {
+                    self.semantic.table_handling = TableHandling::Gfm;
+                }
+            }
+            _ => {}
+        }
+
+        if self.profile == OutputProfile::Pandoc {
+            if self.render.raw_html_policy == render_defaults.raw_html_policy {
+                self.render.raw_html_policy = RawHtmlPolicy::Faithful;
+            }
+            if self.render.smart_punctuation == render_defaults.smart_punctuation {
+                self.render.smart_punctuation = SmartPunctuation::Normalize;
+            }
+        }
+
+        if self.profile == OutputProfile::Obsidian
+            && self.render.raw_html_policy == render_defaults.raw_html_policy
+        {
+            self.render.raw_html_policy = RawHtmlPolicy::Preserve;
+        }
+
+        if self.profile == OutputProfile::MdxSafe {
+            if self.render.raw_html_policy == render_defaults.raw_html_policy {
+                self.render.raw_html_policy = RawHtmlPolicy::Escape;
+            }
+            if self.render.comment_policy == render_defaults.comment_policy {
+                self.render.comment_policy = CommentPolicy::Drop;
+            }
+            if self.render.escaping_mode == render_defaults.escaping_mode {
+                self.render.escaping_mode = EscapingMode::Strict;
+            }
+        }
+
+        if self.profile == OutputProfile::PlainText {
+            if self.render.raw_html_policy == render_defaults.raw_html_policy {
+                self.render.raw_html_policy = RawHtmlPolicy::Drop;
+            }
+            if self.cleanup.image_mode == cleanup_defaults.image_mode {
+                self.cleanup.image_mode = ImageMode::AltText;
+            }
+        }
+    }
+
     /// Validate the options value. Returns `Err` on the first configuration problem.
     pub fn validate(&self) -> crate::Result<()> {
         validation::validate(self)

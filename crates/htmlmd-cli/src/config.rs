@@ -37,6 +37,7 @@ pub fn load_config(cli: &Cli) -> Result<ConversionOptions> {
     // Highest: explicit CLI flags.
     let mut opts: ConversionOptions = figment.extract().map_err(|e| CliError::Config(e.to_string()))?;
     apply_cli_overrides(&mut opts, cli);
+    opts.apply_profile_defaults();
     opts.validate().map_err(|e| CliError::Config(e.to_string()))?;
     Ok(opts)
 }
@@ -118,5 +119,20 @@ fn apply_cli_overrides(opts: &mut ConversionOptions, cli: &Cli) {
     }
     if cli.strict {
         opts.strict = true;
+    }
+    if cli.metadata_title {
+        opts.cleanup.metadata.title = true;
+    }
+    if cli.metadata_description {
+        opts.cleanup.metadata.description = true;
+    }
+    if cli.metadata_canonical_url {
+        opts.cleanup.metadata.canonical_url = true;
+    }
+    if let Some(r) = cli.reference_placement {
+        opts.render.reference_placement = r.into();
+    }
+    if let Some(i) = cli.image_mode {
+        opts.cleanup.image_mode = i.into();
     }
 }

@@ -1,6 +1,6 @@
 # htmlmd option reference
 
-This document lists the configuration options accepted by `htmlmd-core` and the CLI. The schema is stable; the effect column indicates what is implemented and tested through **Phase 2**.
+This document lists the configuration options accepted by `htmlmd-core` and the CLI. The schema is stable; the effect column indicates what is implemented and tested through **Phase 3**.
 
 Legend:
 - ✅ Implemented and tested
@@ -11,7 +11,7 @@ Legend:
 
 | Option    | Type   | Default      | Phase 2 | Description                              |
 |-----------|--------|--------------|---------|------------------------------------------|
-| `profile` | string | `commonmark` | ✅      | Output profile (`commonmark`, `gfm`, …)  |
+| `profile` | string | `commonmark` | ✅      | Output profile (`commonmark`, `gfm`, `extended`, `pandoc`, `obsidian`, `mdx-safe`, `plain-text`)  |
 | `strict`  | bool   | `false`      | ✅      | Turn warnings into errors                |
 
 ## `[render]` – Markdown rendering
@@ -36,9 +36,9 @@ Legend:
 | `final-newline`           | enum   | `ensure`      | ✅     | `ensure`, `preserve`, `suppress`             |
 | `blank-line-compaction`   | u8     | `1`           | ⚠️     | Schema only                                  |
 | `link-style`              | enum   | `inline`      | ✅     | `inline`, `reference`, `collapsed-reference`, `shortcut-reference` |
-| `reference-placement`     | enum   | `end`         | ⚠️     | Reference links always placed at end         |
-| `image-mode`              | enum   | `inline`      | ✅     | `inline`, `skip`, `alt-text` wired; `reference` reserved |
-| `title-attribute`         | enum   | `ignore`      | ✅     | `ignore` strips titles; others not wired     |
+| `reference-placement`     | enum   | `end`         | ✅     | `end`, `adjacent`, `section-end`             |
+| `image-mode`              | enum   | `inline`      | ✅     | `inline`, `skip`, `alt-text`, `reference`    |
+| `title-attribute`         | enum   | `ignore`      | ⚠️     | `ignore` strips titles; `inline`/`reference` not wired |
 | `url-escaping`            | enum   | `auto`        | ⚠️     | Schema only                                  |
 | `autolink-detection`      | bool   | `true`        | ⚠️     | Schema only                                  |
 | `email-handling`          | enum   | `mailto`      | ⚠️     | Schema only                                  |
@@ -82,22 +82,23 @@ Legend:
 | `normalize-headings`      | bool     | `false`                          | ⚠️     | Schema only |
 | `list-indent`             | u8       | `4`                              | ⚠️     | Schema only |
 | `task-lists`              | bool     | `true`                           | ⚠️     | Schema only; `htmd` handles some checkboxes |
-| `table-handling`          | enum     | `gfm`                            | ✅     | GFM pipe tables via `htmd` |
-| `difficult-table-strategy`| enum     | `html-fallback`                  | ⚠️     | Schema only |
-| `code-language-patterns`  | [string] | `language-*`, `lang-*`, …        | ⚠️     | Parsed/validated; `htmd` extracts `class` language |
+| `table-handling`          | enum     | `gfm`                            | ✅     | `gfm`, `html-fallback`, `csv-like`, `flatten`, `drop` |
+| `difficult-table-strategy`| enum     | `html-fallback`                  | ⚠️     | `html-fallback`/`flatten` wired; `span-cells` reserved |
+| `code-language-patterns`  | [string] | `language-*`, `lang-*`, …        | ✅     | Class/language extraction |
+| `detect-languages`        | bool     | `true`                           | ✅     | Heuristic language detection for bare code blocks |
 | `inline-style-subset`     | enum     | `basic`                          | ⚠️     | Schema only |
 | `semantic-tags`           | enum     | `convert`                        | ⚠️     | Schema only |
-| `definition-lists`        | bool     | `false`                          | ❌     | Reserved |
-| `footnotes`               | bool     | `false`                          | ❌     | Reserved |
-| `math`                    | object   | `enabled: false`                 | ❌     | Reserved |
-| `mermaid`                 | enum     | `fenced`                         | ❌     | Reserved |
+| `definition-lists`        | bool     | `false`                          | ✅     | Pandoc-style definition lists |
+| `footnotes`               | bool     | `false`                          | ✅     | `[^n]` refs and `[^n]: ...` defs |
+| `math`                    | object   | `enabled: false`                 | ✅     | `inline-dollar`, `block-dollar`, `fenced`, `plain`, `preserve-html` |
+| `mermaid`                 | enum     | `fenced`                         | ✅     | `fenced`, `preserve-html`, `drop` |
 | `embedded-media`          | enum     | `preserve-link`                  | ❌     | Reserved |
 
 ## `[extension]` – Extensibility
 
 | Option        | Type     | Default | Status | Notes |
 |---------------|----------|---------|--------|-------|
-| `custom-rules`| [object] | `[]`    | ❌     | Reserved |
+| `custom-rules`| [object] | `[]`    | ✅     | Per-selector actions; see README examples |
 | `rule-packs`  | [string] | `[]`    | ❌     | Reserved |
 
 ## `[limits]` – Safety and size limits
@@ -105,31 +106,52 @@ Legend:
 | Option              | Type | Default | Status | Notes |
 |---------------------|------|---------|--------|-------|
 | `max-input-bytes`   | u64  | `0`     | ✅     | `0` = unlimited |
-| `max-output-bytes`  | u64  | `0`     | ⚠️     | Parsed, not enforced |
-| `max-dom-depth`     | u32  | `0`     | ⚠️     | Parsed, not enforced |
+| `max-output-bytes`  | u64  | `0`     | ✅     | `0` = unlimited |
+| `max-dom-depth`     | u32  | `0`     | ✅     | `0` = unlimited |
 | `max-node-count`    | u64  | `0`     | ✅     | `0` = unlimited |
-| `max-attribute-len` | u64  | `0`     | ⚠️     | Parsed, not enforced |
+| `max-attribute-len` | u64  | `0`     | ✅     | `0` = unlimited |
 
 ## CLI-only flags
 
-| Flag                      | Status | Notes |
-|---------------------------|--------|-------|
-| `--output-dir`            | ✅     | Batch output directory |
-| `--mirror`                | ✅     | Preserve directory tree under `--output-dir` |
-| `--recursive`             | ✅     | Recurse directories for `.html`/`.htm` |
-| `--output-policy`         | ✅     | `overwrite`, `skip-existing`, `fail-if-exists` |
-| `--atomic`                | ✅     | Write via temp file + rename |
-| `--preserve-timestamps`   | ✅     | Copy input timestamps to output |
-| `--manifest`              | ✅     | JSON manifest with hashes and metadata |
-| `--check`                 | ✅     | Exit non-zero if output would change |
-| `--diff`                  | ✅     | Print line diff with `--check` |
-| `--encoding`              | ✅     | Explicit input encoding (BOM auto-detected) |
-| `--config`                | ✅     | Explicit TOML/JSON config file |
-| `--print-default-config`  | ✅     | TOML dump of defaults |
-| `--print-effective-config`| ✅     | JSON dump after merges |
-| `--dry-run`               | ✅     | Simulate, no writes |
-| `--jobs`                  | ✅     | Rayon thread-pool size |
-| `--quiet` / `--verbose`   | ✅     | Output verbosity |
+| Flag                          | Status | Notes |
+|-------------------------------|--------|-------|
+| `-o`, `--output`              | ✅     | Output file (`-` for stdout) |
+| `--output-dir`                | ✅     | Batch output directory |
+| `--mirror`                    | ✅     | Preserve directory tree under `--output-dir` |
+| `--recursive`                 | ✅     | Recurse directories for `.html`/`.htm` |
+| `--output-policy`             | ✅     | `overwrite`, `skip-existing`, `fail-if-exists` |
+| `--atomic`                    | ✅     | Write via temp file + rename |
+| `--preserve-timestamps`       | ✅     | Copy input timestamps to output |
+| `--manifest`                  | ✅     | JSON manifest with hashes and metadata |
+| `--check`                     | ✅     | Exit non-zero if output would change |
+| `--diff`                      | ✅     | Print line diff with `--check` |
+| `--encoding`                  | ✅     | Explicit input encoding (BOM auto-detected) |
+| `-c`, `--config`              | ✅     | Explicit TOML/JSON config file |
+| `--print-default-config`      | ✅     | TOML dump of defaults |
+| `--print-effective-config`    | ✅     | JSON dump after merges |
+| `--dry-run`                   | ✅     | Simulate, no writes |
+| `--jobs`                      | ✅     | Rayon thread-pool size |
+| `--quiet` / `--verbose`       | ✅     | Output verbosity |
+| `--profile`                   | ✅     | Output profile shorthand |
+| `--heading-style`             | ✅     | `atx`, `setex`, `keep` |
+| `--bullet`                    | ✅     | `hyphen`, `asterisk`, `plus` |
+| `--link-style`                | ✅     | `inline`, `reference`, `collapsed-reference`, `shortcut-reference` |
+| `--reference-placement`       | ✅     | `end`, `adjacent`, `section-end` |
+| `--image-mode`                | ✅     | `inline`, `reference`, `skip`, `alt-text` |
+| `--code-fence`                | ✅     | `backticks`, `tildes` |
+| `--hr-style`                  | ✅     | `dashes`, `asterisks`, `underscores` |
+| `--br-style`                  | ✅     | `two-spaces`, `backslash` |
+| `--skip-tags`                 | ✅     | Comma-separated tag names to drop |
+| `--remove-selectors`          | ✅     | Comma-separated CSS selectors to drop |
+| `--unwrap-selectors`          | ✅     | Comma-separated CSS selectors to unwrap |
+| `--keep-only-selectors`       | ✅     | Comma-separated CSS selectors to keep |
+| `--extract-selector`          | ✅     | Keep only the first match |
+| `--base-url`                  | ✅     | Resolve relative URLs |
+| `--remove-tracking-params`    | ✅     | Strip tracking query params |
+| `--metadata-title`            | ✅     | Extract `<title>` into result metadata |
+| `--metadata-description`      | ✅     | Extract `meta[name="description"]` |
+| `--metadata-canonical-url`    | ✅     | Extract `link[rel="canonical"]` |
+| `--strict`                    | ✅     | Turn warnings into errors |
 
 ## Configuration layers
 
