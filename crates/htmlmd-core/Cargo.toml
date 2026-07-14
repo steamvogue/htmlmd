@@ -1,0 +1,38 @@
+[package]
+name = "htmlmd-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Core library for fast, configurable HTML to Markdown conversion."
+
+[features]
+default = ["parallel"]
+parallel = ["rayon"]
+
+[dependencies]
+htmd = { workspace = true }
+scraper = { workspace = true }
+markup5ever = { workspace = true }
+ego-tree = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+once_cell = { workspace = true }
+indexmap = { workspace = true }
+unicode-normalization = { workspace = true }
+log = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "convert_bench"
+harness = false

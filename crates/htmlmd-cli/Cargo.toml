@@ -1,0 +1,44 @@
+[package]
+name = "htmlmd-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Command-line interface for htmlmd, the fast HTML to Markdown converter."
+
+[[bin]]
+name = "htmlmd"
+path = "src/main.rs"
+
+[features]
+default = ["parallel"]
+parallel = ["htmlmd-core/parallel", "rayon"]
+
+[dependencies]
+htmlmd-core = { workspace = true }
+clap = { workspace = true }
+figment = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dirs = { workspace = true }
+walkdir = { workspace = true }
+glob = { workspace = true }
+sha2 = { workspace = true }
+similar = { workspace = true }
+encoding_rs = { workspace = true }
+filetime = { workspace = true }
+tempfile = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
