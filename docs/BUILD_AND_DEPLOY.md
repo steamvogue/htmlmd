@@ -78,31 +78,31 @@ target\release\htmlmd.exe
 
 ### Cross-compiling from Linux to Windows
 
-You can build a Windows GNU binary from Linux using MinGW.
+You can build a Windows GNU binary from any Linux host — including an ARM64
+one, targeting x86-64 Windows — using MinGW. The linker is already configured
+in [`.cargo/config.toml`](../.cargo/config.toml), so you only need the
+toolchain:
 
 ```bash
-sudo apt install -y mingw-w64
+sudo apt install -y gcc-mingw-w64-x86-64   # or the full mingw-w64
 rustup target add x86_64-pc-windows-gnu
-```
-
-Tell Cargo which linker to use by creating `.cargo/config.toml` in the project root:
-
-```toml
-[target.x86_64-pc-windows-gnu]
-linker = "x86_64-w64-mingw32-gcc"
 ```
 
 Build:
 
 ```bash
-cargo build --workspace --release --target x86_64-pc-windows-gnu
+scripts/build-release.sh x86_64-pc-windows-gnu
+# or: cargo build --workspace --release --target x86_64-pc-windows-gnu
 ```
 
-The binary is at:
+The script drops both binaries plus `SHA256SUMS` into
+`dist/x86_64-pc-windows-gnu/`; a plain cargo build leaves them at
+`target/x86_64-pc-windows-gnu/release/htmlmd.exe`.
 
-```text
-target/x86_64-pc-windows-gnu/release/htmlmd.exe
-```
+The result is a self-contained `PE32+` executable: it imports only Windows
+system DLLs (`kernel32`, `ntdll`, `bcryptprimitives`, …), so there is no
+`libgcc`/`libwinpthread` runtime to copy alongside it. `mimalloc`, the one
+C dependency, cross-compiles cleanly.
 
 > **Note:** The native Windows MSVC target (`x86_64-pc-windows-msvc`) can only be built on Windows with the MSVC toolchain. Use the GNU target above for Linux-hosted cross-compilation.
 
