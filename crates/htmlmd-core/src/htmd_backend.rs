@@ -31,7 +31,10 @@ impl ConverterBackend for HtmdBackend {
     }
 }
 
-fn post_process(markdown: &str, options: &ConversionOptions) -> String {
+/// Shared render post-processing (trailing whitespace, final newline, Unicode
+/// normalization). Also used by `NativeBackend`, whose output must stay
+/// byte-identical to this backend's.
+pub(crate) fn post_process(markdown: &str, options: &ConversionOptions) -> String {
     let mut s = markdown.to_string();
 
     if options.render.trailing_whitespace == WhitespacePolicy::Trim {

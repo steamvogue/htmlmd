@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: Apache-2.0
+// Portions adapted from htmd v0.5.4 (https://github.com/letmutex/htmd), © letmutex, Apache-2.0.
+
+use crate::native::{
+    Element,
+    element_handler::element_util::serialize_if_faithful,
+    element_handler::{HandlerResult, Handlers},
+    text_util::{JoinOnStringIterator, TrimDocumentWhitespace, concat_strings},
+};
+
+pub(super) fn img_handler(handlers: &dyn Handlers, element: Element) -> Option<HandlerResult> {
+    let mut link: Option<String> = None;
+    let mut alt: Option<String> = None;
+    let mut title: Option<String> = None;
+    for (name, value) in element.attrs {
+        let name = name.local.as_ref();
+        if name == "href" {
+            link = Some(value.to_string())
+        } else if name == "src" {
+            link = Some(value.to_string());
+        } else if name == "alt" {
+            alt = Some(value.to_string());
+        } else if name == "title" {
+            title = Some(value.to_string());
+        } else {
+            serialize_if_faithful!(handlers, element, 0);
+        }
+    }
+
+    link.as_ref()?;
+
+    let process_alt_title = |text: String| {
+        text.lines()
+            .map(|line| line.trim_document_whitespace().replace('"', "\\\""))
+            .filter(|line| !line.is_empty())
+            .join("\n")
+    };
+
+    // Handle new lines in alt
+    let alt = alt.map(process_alt_title);
+
+    // Handle new lines in title
+    let title = title.map(process_alt_title);
+
+    let link = link.map(|text| text.replace('(', "\\(").replace(')', "\\)"));
+
+    let has_spaces_in_link = link.as_ref().is_some_and(|link| link.contains(' '));
+
+    let md = concat_strings!(
+        "![",
+        alt.as_ref().unwrap_or(&String::new()),
+        "](",
+        if has_spaces_in_link { "<" } else { "" },
+        link.as_ref().unwrap_or(&String::new()),
+        title
+            .as_ref()
+            .map_or(String::new(), |t| concat_strings!(" \"", t, "\"")),
+        if has_spaces_in_link { ">" } else { "" },
+        ")"
+    );
+    Some(md.into())
+}

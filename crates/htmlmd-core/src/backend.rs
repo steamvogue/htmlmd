@@ -14,6 +14,16 @@ pub trait ConverterBackend: Send + Sync {
     /// Convert a UTF-8 HTML string to Markdown.
     fn convert(&self, html: &str, options: &ConversionOptions) -> Result<ConversionResult>;
 
+    /// Convert an already-parsed (cleaned) document. Default serializes and
+    /// delegates to `convert`, preserving old backends' behavior.
+    fn convert_dom(
+        &self,
+        document: &scraper::Html,
+        options: &ConversionOptions,
+    ) -> Result<ConversionResult> {
+        self.convert(&document.html(), options)
+    }
+
     /// Convert and write the Markdown output directly to a writer.
     fn convert_to_writer(
         &self,

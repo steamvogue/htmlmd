@@ -6,6 +6,7 @@ pub mod diagnostic;
 pub mod error;
 pub mod htmd_backend;
 mod htmd_handlers;
+pub(crate) mod native;
 pub mod options;
 mod regex_cache;
 pub mod result;
@@ -16,10 +17,11 @@ use std::io::Write;
 pub use backend::ConverterBackend;
 pub use error::{Error, Result};
 pub use htmd_backend::HtmdBackend;
+pub use native::NativeBackend;
 pub use options::ConversionOptions;
 pub use result::ConversionResult;
 
-pub use cleanup::{ExtractedMetadata, clean_html};
+pub use cleanup::{ExtractedMetadata, clean_html, clean_html_to_dom};
 use diagnostic::Diagnostic;
 
 /// Convert a UTF-8 HTML string to Markdown using the default backend.
@@ -47,9 +49,13 @@ pub fn convert_with_backend<B: ConverterBackend + ?Sized>(
 
     // All input limits (including max_input_bytes) are enforced in one place:
     // `cleanup::check_limits`, which errors in strict mode and warns otherwise.
-    let (cleaned_html, metadata) = clean_html(html, options, None, &mut diagnostics)?;
+    let (document, metadata) = clean_html_to_dom(html, options, None, &mut diagnostics)?;
 
-    let mut result = backend.convert(&cleaned_html, options)?;
+    // Backends that don't override `convert_dom` get the serialize-and-convert
+    // default, which is byte-identical to the previous
+    // `clean_html` + `convert(&cleaned_html)` string path. `NativeBackend`
+    // overrides it to render straight from the cleaned DOM (single parse).
+    let mut result = backend.convert_dom(&document, options)?;
 
     result.title = metadata.title.or(result.title);
     result.description = metadata.description.or(result.description);

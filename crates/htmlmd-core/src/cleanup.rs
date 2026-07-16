@@ -24,13 +24,28 @@ static SEL_SPAN_CELLS: Lazy<Selector> =
 
 /// Apply HTML cleanup, content selection, and URL rewriting to a string of HTML.
 ///
-/// Returns the cleaned HTML string and extracted metadata.
+/// Returns the cleaned HTML string and extracted metadata. This is a thin
+/// serialize wrapper over [`clean_html_to_dom`]; backends that implement
+/// `ConverterBackend::convert_dom` natively can consume the DOM directly and
+/// skip the serialize/re-parse round trip.
 pub fn clean_html(
     html: &str,
     options: &ConversionOptions,
     path: Option<&str>,
     diagnostics: &mut dyn DiagnosticsCollector,
 ) -> Result<(String, ExtractedMetadata)> {
+    let (document, metadata) = clean_html_to_dom(html, options, path, diagnostics)?;
+    Ok((document.html(), metadata))
+}
+
+/// Apply HTML cleanup, content selection, and URL rewriting, returning the
+/// cleaned document as a parsed `scraper::Html` tree plus extracted metadata.
+pub fn clean_html_to_dom(
+    html: &str,
+    options: &ConversionOptions,
+    path: Option<&str>,
+    diagnostics: &mut dyn DiagnosticsCollector,
+) -> Result<(Html, ExtractedMetadata)> {
     let mut document = Html::parse_document(html);
 
     check_limits(html, &document, options, diagnostics)?;
@@ -61,8 +76,7 @@ pub fn clean_html(
         strip_attribute(&mut document, "title");
     }
 
-    let cleaned = document.html();
-    Ok((cleaned, metadata))
+    Ok((document, metadata))
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
