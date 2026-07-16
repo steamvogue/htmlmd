@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "HTTP server exposing the htmlmd conversion API."
+keywords = ["html", "markdown", "converter", "http", "server"]
+categories = ["web-programming", "text-processing"]
 
 [features]
 default = ["mimalloc"]

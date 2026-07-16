@@ -43,6 +43,25 @@ The server shuts down gracefully on `Ctrl-C` (SIGINT) and, on Unix, SIGTERM: in-
 
 The `--bind` flag takes precedence over `HTMLMD_BIND`. An invalid bind address or `HTMLMD_MAX_BODY_BYTES` value prints an error to stderr and exits with code 2; a failure to bind the socket (for example, port already in use) exits with code 1.
 
+### Untrusted input
+
+Conversion is memory-safe and does not panic on malformed input (see
+`crates/htmlmd-core/tests/properties.rs`), and `max-dom-depth` defaults to
+256, so deeply nested documents are pruned rather than overflowing the
+renderer's stack.
+
+One sharp edge remains, and it is inherited from the HTML parser
+(`html5ever`, shared by essentially every Rust HTML tool): **parsing is
+quadratic in nesting depth**. 50 000 nested `<div>`s take ~10 seconds to
+parse before any limit of ours can apply, because the limit is measured on
+the parsed tree. If you expose this server to untrusted callers, bound the
+work up front:
+
+- lower `HTMLMD_MAX_BODY_BYTES` to what your callers legitimately need — the
+  64 MiB default is far too generous for adversarial input;
+- set `limits.max-input-bytes` in the request options as a second guard;
+- run the service behind a request timeout.
+
 ## Endpoints
 
 ### `GET /health`

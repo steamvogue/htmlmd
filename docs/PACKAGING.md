@@ -2,6 +2,26 @@
 
 This guide covers creating installable packages for Windows (winget) and Debian/Ubuntu (apt-get). You should already have a release binary; see [`docs/BUILD_AND_DEPLOY.md`](BUILD_AND_DEPLOY.md) if you need build instructions.
 
+> **Note:** tagged releases already publish prebuilt archives
+> (`htmlmd-<tag>-<triple>.tar.gz`, `.zip` on Windows) and a Docker image via
+> [`.github/workflows/release.yml`](../.github/workflows/release.yml) — see
+> [`docs/RELEASING.md`](RELEASING.md). The steps below cover the extra,
+> currently manual distribution channels.
+
+## Rust users: crates.io and cargo-binstall
+
+Once the crates are published (see [`docs/RELEASING.md`](RELEASING.md)),
+Rust users can install straight from crates.io:
+
+```bash
+cargo install htmlmd-cli          # builds from source
+cargo binstall htmlmd-cli        # downloads the prebuilt release archive
+```
+
+`cargo binstall` needs no extra setup on our side: the
+`[package.metadata.binstall]` section in `crates/htmlmd-cli/Cargo.toml`
+maps each target triple to the matching GitHub Release asset.
+
 ## Windows: winget
 
 winget packages are described by YAML manifests in the [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) repository. You can submit manifests with the `wingetcreate` tool or by hand.
@@ -16,7 +36,10 @@ cargo install cargo-wix
 cargo wix -p htmlmd-cli --output target/wix/htmlmd.msi
 ```
 
-If you prefer a simple portable archive, zip the EXE instead:
+If you prefer a simple portable archive, the release workflow already
+uploads `htmlmd-<tag>-x86_64-pc-windows-msvc.zip` to every GitHub Release,
+so there is nothing to build — point the manifest at that asset. To produce
+one by hand instead:
 
 ```powershell
 Compress-Archive -Path target\release\htmlmd.exe -DestinationPath target\htmlmd-x86_64-pc-windows-msvc.zip
@@ -192,7 +215,10 @@ sudo apt install htmlmd
 
 | Platform | Package format | Tooling | Public index |
 |----------|----------------|---------|--------------|
+| Rust toolchain | crate / prebuilt archive | `cargo install`, `cargo binstall` | crates.io + GitHub Releases |
 | Windows | `.msi` or `.zip` | `cargo-wix`, `wingetcreate` | `microsoft/winget-pkgs` |
 | Debian/Ubuntu | `.deb` | `cargo-deb`, `reprepro` | Self-hosted apt repo or Launchpad PPA |
 
-For cross-platform release automation, combine these steps with the GitHub Actions workflow shown in [`docs/BUILD_AND_DEPLOY.md`](BUILD_AND_DEPLOY.md).
+Cross-platform binaries and the Docker image are produced automatically by
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) on every
+`v*` tag; the runbook lives in [`docs/RELEASING.md`](RELEASING.md).

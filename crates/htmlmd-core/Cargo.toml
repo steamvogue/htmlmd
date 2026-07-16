@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Core library for fast, configurable HTML to Markdown conversion."
+readme = "../../README.md"
+keywords = ["html", "markdown", "converter", "commonmark"]
+categories = ["text-processing", "web-programming"]
 
 [features]
 default = ["parallel", "backend-htmd"]
@@ -41,6 +44,9 @@ criterion = { workspace = true }
 mimalloc = { workspace = true }
 # Benches always need raw htmd as the baseline, independent of backend-htmd.
 htmd = { workspace = true }
+fast_html2md = "0.0.62"
+mdka = "2.1.6"
+proptest = "1.11.0"
 
 [[bench]]
 name = "convert_bench"

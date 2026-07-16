@@ -52,6 +52,7 @@ pub fn clean_html_to_dom(
     // Extract metadata from the original document before any destructive cleanup.
     let metadata = extract_metadata(&document, options);
 
+    apply_depth_limit(&mut document, options, diagnostics);
     apply_removals(&mut document, options);
     apply_footnote_cleanup(&mut document, options);
     apply_per_tag_behavior(&mut document, options);
@@ -146,21 +147,69 @@ fn check_limits(
     Ok(())
 }
 
+/// Deepest node in the tree, measured iteratively — a recursive walk would
+/// itself overflow the stack on the pathological input this limit exists to
+/// catch.
 fn max_dom_depth(document: &Html) -> u32 {
-    fn depth(node: NodeRef<'_, Node>, current: u32) -> u32 {
-        let mut max = current;
-        for child in node.children() {
-            max = max.max(depth(child, current + 1));
-        }
-        max
-    }
-    document
+    let mut max = 0;
+    let mut stack: Vec<(NodeId, u32)> = document
         .tree
         .root()
         .children()
-        .map(|c| depth(c, 1))
-        .max()
-        .unwrap_or(0)
+        .map(|c| (c.id(), 1))
+        .collect();
+    while let Some((id, depth)) = stack.pop() {
+        max = max.max(depth);
+        if let Some(node) = document.tree.get(id) {
+            stack.extend(node.children().map(|c| (c.id(), depth + 1)));
+        }
+    }
+    max
+}
+
+/// Detach every subtree nested deeper than `max-dom-depth`.
+///
+/// Without this the limit would be advisory in non-strict mode: the renderer
+/// recurses per DOM level, so a document nesting a few thousand elements
+/// aborts the process (stack overflow) instead of producing output. Strict
+/// mode rejects such documents in `check_limits` before reaching this pass.
+fn apply_depth_limit(
+    document: &mut Html,
+    options: &ConversionOptions,
+    diagnostics: &mut dyn DiagnosticsCollector,
+) {
+    let limit = options.limits.max_dom_depth;
+    if limit == 0 {
+        return;
+    }
+
+    let mut too_deep: Vec<NodeId> = Vec::new();
+    let mut stack: Vec<(NodeId, u32)> = document
+        .tree
+        .root()
+        .children()
+        .map(|c| (c.id(), 1))
+        .collect();
+    while let Some((id, depth)) = stack.pop() {
+        // Cut at the first offending level: detaching the node takes its
+        // whole subtree with it, so there is no need to descend further.
+        if depth > limit {
+            too_deep.push(id);
+            continue;
+        }
+        if let Some(node) = document.tree.get(id) {
+            stack.extend(node.children().map(|c| (c.id(), depth + 1)));
+        }
+    }
+
+    if too_deep.is_empty() {
+        return;
+    }
+    diagnostics.push(Diagnostic::warning(format!(
+        "pruned {} subtree(s) nested deeper than max-dom-depth {limit}",
+        too_deep.len()
+    )));
+    detach_ids(document, &too_deep);
 }
 
 fn max_attribute_len(document: &Html) -> u64 {

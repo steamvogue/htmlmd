@@ -179,53 +179,55 @@ sudo install -Dm755 target/release/htmlmd /usr/local/bin/htmlmd
 # Windows: add target\release\htmlmd.exe to PATH or install to C:\Tools
 ```
 
-### GitHub Actions release matrix
+### GitHub Actions release automation
 
-A typical CI job builds for multiple platforms and uploads the binaries as release artifacts:
+Releases are fully automated: pushing a `v*` tag runs
+[`.github/workflows/release.yml`](../.github/workflows/release.yml), which
+builds `htmlmd` and `htmlmd-server` for:
 
-```yaml
-name: Release
-on:
-  push:
-    tags:
-      - 'v*'
+| Target | Runner |
+|--------|--------|
+| `x86_64-unknown-linux-gnu` | `ubuntu-latest` |
+| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
+| `x86_64-unknown-linux-musl` | `ubuntu-latest` (+ musl-tools) |
+| `aarch64-apple-darwin` | `macos-14` |
+| `x86_64-pc-windows-msvc` | `windows-latest` |
 
-jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary: htmlmd
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary: htmlmd.exe
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            binary: htmlmd
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - run: cargo build --workspace --release --target ${{ matrix.target }} --locked
-      - uses: actions/upload-artifact@v4
-        with:
-          name: htmlmd-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
-```
+Each target is assembled in the same `dist/<triple>/` layout that
+`scripts/build-release.sh` produces locally (both binaries plus
+`SHA256SUMS`) and uploaded to the GitHub Release as
+`htmlmd-<tag>-<triple>.tar.gz` (`.zip` on Windows). The workflow also
+builds and pushes a multi-arch (amd64/arm64) server image to
+`ghcr.io/steamvogue/htmlmd-server`. See [`docs/RELEASING.md`](RELEASING.md)
+for the step-by-step release runbook.
 
 ### Docker deployment
 
-A minimal image can run `htmlmd` as a command-line tool:
+The HTTP server ships with a real Dockerfile at
+[`crates/htmlmd-server/Dockerfile`](../crates/htmlmd-server/Dockerfile).
+Build it from the **workspace root** (the build context must contain the
+whole workspace, not just the server crate):
+
+```bash
+docker build -f crates/htmlmd-server/Dockerfile -t htmlmd-server .
+docker run --rm -p 3000:3000 htmlmd-server
+```
+
+The image listens on `0.0.0.0:3000` (set via the `HTMLMD_BIND` environment
+variable; override with `-e HTMLMD_BIND=...`). Tagged releases publish
+multi-arch (amd64/arm64) images, so you can skip building entirely:
+
+```bash
+docker run --rm -p 3000:3000 ghcr.io/steamvogue/htmlmd-server:latest
+```
+
+A minimal image for the CLI follows the same pattern:
 
 ```dockerfile
-FROM rust:1.94 AS builder
+FROM rust:1.94-bookworm AS builder
 WORKDIR /app
 COPY . .
-RUN cargo build --workspace --release
+RUN cargo build -p htmlmd-cli --release --locked
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -242,4 +244,5 @@ docker run --rm -v "$PWD/fixtures:/data" htmlmd /data/basic.html
 
 ## Next steps
 
-For packaging the binaries into installable formats (`.msi`, `.deb`, winget, apt repositories), see [`docs/PACKAGING.md`](PACKAGING.md).
+- For the tag-to-release runbook (versions, tagging, crates.io publishing), see [`docs/RELEASING.md`](RELEASING.md).
+- For packaging the binaries into installable formats (`.msi`, `.deb`, winget, apt repositories), see [`docs/PACKAGING.md`](PACKAGING.md).

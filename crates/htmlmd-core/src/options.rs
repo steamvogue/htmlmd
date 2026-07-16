@@ -390,7 +390,7 @@ pub struct UrlRewriteRule {
 }
 
 /// Safety and size limits.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct Limits {
     /// Maximum input size in bytes. Zero means unlimited.
@@ -398,11 +398,35 @@ pub struct Limits {
     /// Maximum output size in bytes. Zero means unlimited.
     pub max_output_bytes: u64,
     /// Maximum DOM depth. Zero means unlimited.
+    ///
+    /// Unlike the other limits, this one defaults to
+    /// [`DEFAULT_MAX_DOM_DEPTH`] rather than unlimited: the renderer walks
+    /// the tree recursively, so unbounded nesting would exhaust the stack and
+    /// abort the process. Content nested deeper than the limit is pruned with
+    /// a warning diagnostic (or rejected outright in `strict` mode).
     pub max_dom_depth: u32,
     /// Maximum DOM node count. Zero means unlimited.
     pub max_node_count: u64,
     /// Maximum length of a single attribute value. Zero means unlimited.
     pub max_attribute_len: u64,
+}
+
+/// Default [`Limits::max_dom_depth`].
+///
+/// Real-world documents nest tens of levels deep; 256 leaves generous
+/// headroom while keeping pathological input from overflowing the stack.
+pub const DEFAULT_MAX_DOM_DEPTH: u32 = 256;
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            max_input_bytes: 0,
+            max_output_bytes: 0,
+            max_dom_depth: DEFAULT_MAX_DOM_DEPTH,
+            max_node_count: 0,
+            max_attribute_len: 0,
+        }
+    }
 }
 
 /// Math detection and output options.

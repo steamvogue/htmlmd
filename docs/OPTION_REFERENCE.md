@@ -86,7 +86,7 @@ Legend:
 |---------------------|------|---------|--------|-------|
 | `max-input-bytes`   | u64  | `0`     | ✅     | `0` = unlimited |
 | `max-output-bytes`  | u64  | `0`     | ✅     | `0` = unlimited |
-| `max-dom-depth`     | u32  | `0`     | ✅     | `0` = unlimited |
+| `max-dom-depth`     | u32  | `256`   | ✅     | `0` = unlimited. Enforced, not advisory: content nested deeper is pruned with a warning (rejected outright under `strict`). The renderer recurses per DOM level, so removing the default invites a stack overflow on pathological input. |
 | `max-node-count`    | u64  | `0`     | ✅     | `0` = unlimited |
 | `max-attribute-len` | u64  | `0`     | ✅     | `0` = unlimited |
 

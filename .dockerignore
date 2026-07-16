@@ -1,0 +1,5 @@
+# Keep the Docker build context small: crates/htmlmd-server/Dockerfile is
+# built with the workspace root as context (see that file for the command).
+/target
+/dist
+/.git

@@ -2,6 +2,8 @@
 
 pub mod backend;
 pub mod cleanup;
+#[doc(hidden)]
+pub mod corpus;
 pub mod diagnostic;
 pub mod error;
 #[cfg(feature = "backend-htmd")]

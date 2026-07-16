@@ -27,6 +27,37 @@ API server (`htmlmd-server`).
 - **Layered configuration** — defaults → user config → project config →
   `--config` file → `HTMLMD_*` environment variables → CLI flags.
 
+## Performance
+
+Full CLI runs over identical input on a Raspberry Pi 5 (aarch64), GFM output,
+lower is better:
+
+| tool | 1 MB article | 245 KB API docs |
+|---|---|---|
+| **htmlmd** | **59 ms** | **30 ms** |
+| html-to-markdown v2 (Go) | 174 ms | 23 ms |
+| turndown (Node) | 1482 ms | 412 ms |
+| markdownify (Python) | 1164 ms | 286 ms |
+| pandoc | 5761 ms | 883 ms |
+
+Go's html-to-markdown v2 wins the code-heavy column — htmlmd runs
+code-language detection there that v2 does not implement. Everything else,
+including pandoc (the only other multi-flavor converter), is 10–98× slower.
+The whole htmlmd pipeline — cleanup, tracking-param stripping, language
+detection, metadata, safety limits — costs 8–19% over the bare `htmd`
+library it renders with.
+
+Two honest caveats: as a *library*,
+[`fast_html2md`](https://github.com/spider-rs/html2md) is 1.5–2.4× faster
+than htmlmd because it streams instead of building a DOM — if you want plain
+single-flavor conversion and nothing else, use it. htmlmd builds a tree
+because profiles, selector rules, and metadata need one. And parsing is
+quadratic in nesting depth (an `html5ever` trait shared by most Rust HTML
+tools), so bound `max-input-bytes` for untrusted input.
+
+Method, full results, and the reproducible harness:
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) · [`benches/compare/`](benches/compare/).
+
 ## Install
 
 ```bash

@@ -4,6 +4,77 @@ Tracking file for the performance work in [`ROADMAP.md`](ROADMAP.md). Every
 optimization milestone records before/after numbers here. No perf claim ships
 without a row in this file.
 
+## Cross-tool comparison (M4)
+
+Harness: [`benches/compare/`](../benches/compare/) — hyperfine over full CLI
+invocations (process + interpreter startup included, which is what a
+command-line user actually pays), every tool converting **byte-identical
+input** from the shared synthetic corpus, each asked for GFM-style output
+where it has a flag for it. Reproduce with `benches/compare/run.sh`.
+
+Raspberry Pi 5 (aarch64), quiet machine, 2026-07-16. Mean ± σ; the
+parenthesised figure is slowdown relative to htmlmd (lower is better for
+them):
+
+| tool | wiki (1.0 MB) | news (217 KB) | docs (245 KB) | tables (211 KB) |
+|---|---|---|---|---|
+| **htmlmd** 0.1.0 | **59±1 ms** | **17±1 ms** | **30±3 ms** | **30±1 ms** |
+| [html-to-markdown v2] (Go) 2.5.2 | 174±13 ms (2.9×) | 34±2 ms (2.0×) | **23±1 ms (0.8×)** | 59±2 ms (1.9×) |
+| [turndown] (Node) 7.2 + gfm | 1482±34 ms (25.1×) | 321±20 ms (18.7×) | 412±2 ms (13.8×) | 304±4 ms (10.0×) |
+| [markdownify] (Python) 1.2 | 1164±27 ms (19.7×) | 307±2 ms (17.9×) | 286±3 ms (9.6×) | 769±24 ms (25.3×) |
+| [pandoc] 3.10 | 5761±607 ms (97.5×) | 1026±17 ms (59.8×) | 883±11 ms (29.6×) | 1536±16 ms (50.5×) |
+
+**Honest reading, including where we lose.** Against the interpreted
+converters (turndown, markdownify) htmlmd is an order of magnitude faster —
+10–25× — and pandoc, the only other tool with multi-flavor output, is 30–98×
+slower. The one genuine competitor is Go's html-to-markdown v2: htmlmd is
+2–3× faster on prose- and table-heavy pages, **but v2 is ~25% faster on the
+code-heavy `docs` corpus**. That is not noise and not a mystery: on that
+corpus htmlmd runs code-language detection (class parsing plus a content
+heuristic) that v2 simply does not implement, so it is doing strictly more
+work per document. Turn `semantic.detect-languages` off and the gap closes —
+but the honest default-vs-default number is the one in the table.
+
+Speed is not the whole comparison: see the profile/feature matrix in the
+README for what these tools do and don't convert. This harness measures time
+only.
+
+### Rust libraries, in-process (no CLI startup)
+
+From the criterion bench (`cargo bench -p htmlmd-core --bench convert_bench`),
+same corpus, median of 10 samples. These are library calls, so process
+startup is excluded and the comparison is architecture-vs-architecture:
+
+| library | wiki | news | docs | tables | what it does |
+|---|---|---|---|---|---|
+| **htmlmd** (commonmark) | 44.2 ms | 11.4 ms | 14.2 ms | 24.6 ms | full pipeline: 7 profiles, selector rules, cleanup, metadata, limits |
+| `htmd` 0.5.4 (our renderer basis) | 38.3 ms | 9.2 ms | 10.3 ms | 20.2 ms | tag translation only |
+| [`fast_html2md`] 0.0.62 | **29.0 ms** | **5.9 ms** | **5.8 ms** | **15.0 ms** | single flavor, streaming rewriter |
+| [`mdka`] 2.1.6 | 55.1 ms | 12.2 ms | 13.1 ms | 19.7 ms | single flavor, 5 modes |
+
+**We are not the fastest Rust HTML→Markdown library, and shouldn't claim to
+be.** `fast_html2md` is 1.5–2.4× faster than htmlmd — and faster than `htmd`
+itself — because it is architecturally different: it streams through
+Cloudflare's `lol_html` rewriter and never builds a DOM. htmlmd builds a
+tree because profiles, CSS-selector rules, table-complexity analysis, and
+metadata extraction all require random access to the document; that tree is
+the price of the feature set, and M3.5 got its cost down to 8–19% over a
+tree-based renderer doing none of that work.
+
+The accurate claim is narrower and still worth making: **htmlmd is the
+fastest converter that offers profiles, selector rules, and metadata** — it
+beats `mdka` outright, and every non-Rust tool by 2–98×. If you need only
+plain single-flavor conversion at maximum speed, `fast_html2md` is the better
+tool and we should say so.
+
+[`fast_html2md`]: https://github.com/spider-rs/html2md
+[`mdka`]: https://github.com/nabbisen/mdka-rs
+
+[html-to-markdown v2]: https://github.com/JohannesKaufmann/html-to-markdown
+[turndown]: https://github.com/mixmark-io/turndown
+[markdownify]: https://github.com/matthewwithanm/python-markdownify
+[pandoc]: https://github.com/jgm/pandoc
+
 ## Method
 
 - Harness: `cargo bench -p htmlmd-core --bench convert_bench`

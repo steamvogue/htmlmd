@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Command-line interface for htmlmd, the fast HTML to Markdown converter."
+readme = "../../README.md"
+keywords = ["html", "markdown", "converter", "commonmark", "cli"]
+categories = ["command-line-utilities", "text-processing"]
 
 [package.metadata.deb]
 maintainer = "htmlmd contributors"
@@ -16,6 +19,19 @@ extended-description = """\
   with multiple output profiles."""
 section = "utils"
 priority = "optional"
+
+# `cargo binstall htmlmd-cli` fetches the prebuilt archives that
+# .github/workflows/release.yml uploads to GitHub Releases.
+# Asset naming: htmlmd-v<version>-<target>.tar.gz (zip on Windows),
+# containing htmlmd[.exe], htmlmd-server[.exe] and SHA256SUMS at the root.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/htmlmd-v{ version }-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/htmlmd-v{ version }-{ target }.zip"
+pkg-fmt = "zip"
 
 [[bin]]
 name = "htmlmd"

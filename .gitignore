@@ -29,3 +29,11 @@ Thumbs.db
 
 # Insta snapshot update leftovers
 *.snap.new
+
+# Cross-tool benchmark harness: local tools, corpus dumps, results
+/benches/compare/.tools/
+/benches/compare/node_modules/
+/benches/compare/package*.json
+/benches/compare/corpus/
+/benches/compare/results/
+__pycache__/
