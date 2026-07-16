@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+#![cfg(feature = "backend-htmd")]
 
 //! Differential parity tests: `NativeBackend` must produce **byte-identical**
 //! Markdown to `HtmdBackend` for every fixture under every profile, for the

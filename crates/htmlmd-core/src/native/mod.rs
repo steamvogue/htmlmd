@@ -189,7 +189,7 @@ impl ConverterBackend for NativeBackend {
     ) -> Result<ConversionResult> {
         let converter = build_native_converter(options);
         let markdown = converter.dom_to_markdown(document);
-        let markdown = crate::htmd_backend::post_process(&markdown, options);
+        let markdown = crate::postprocess::post_process(&markdown, options);
 
         Ok(ConversionResult {
             markdown,

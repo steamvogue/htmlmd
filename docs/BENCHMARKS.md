@@ -68,3 +68,31 @@ Reading: the pathological regex-compilation overhead is gone; every corpus
 now sits at a uniform **~2.4–2.9×** over raw htmd. That remaining band is the
 structural double-parse + serialize cost — precisely ROADMAP M3's target
 (single-parse pipeline, goal ≤ ~1.3×).
+
+### M3 — single-parse native renderer (2026-07-16)
+
+`convert()` now renders directly from the cleaned scraper DOM via the native
+walker (ported from htmd, byte-identical output — 26 differential parity
+suites). The serialize + re-parse step is gone; `keep-only` prunes the live
+tree instead of triggering a third parse.
+
+| Benchmark | M1 (htmd pipeline) | M3 native | speedup | raw htmd | overhead now |
+|---|---|---|---|---|---|
+| corpus/wiki | 128.0 ms* | **77.7 ms** | 1.65× | 37.5 ms | 2.07× |
+| corpus/news | 22.7 ms* | **12.8 ms** | 1.78× | 8.7 ms | 1.46× |
+| corpus/docs | 28.7 ms* | **15.6 ms** | 1.84× | 9.9 ms | 1.58× |
+| corpus/tables | 47.8 ms* | **31.0 ms** | 1.54× | 19.8 ms | 1.57× |
+
+\* the `htmd-backend` rows measured in the same M3 run (the old pipeline kept
+behind the `backend-htmd` feature), so the comparison is same-commit,
+same-machine. Fixtures: basic 62 µs · table 63 µs · malformed 50 µs.
+
+Cumulative since M0 baseline: **wiki 978.7 → 77.7 ms (12.6×), docs 554.1 →
+15.6 ms (35×)**, news 24.3 → 12.8 ms, tables 58.3 → 31.0 ms.
+
+Honest scorecard vs the ≤1.3× goal: 1.46–1.58× on three corpora, 2.07× on
+the 1 MB wiki doc. The residual is no longer parsing — it's the ~15
+sequential cleanup passes each scanning the tree with selectors (work raw
+htmd doesn't do at all). Closing further means fusing cleanup passes into
+fewer traversals — tracked as a ROADMAP follow-up, with per-pass profiling
+before any rewrite.

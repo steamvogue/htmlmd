@@ -116,7 +116,7 @@ config, graceful shutdown, and its first tests.
 
 Acceptance: all fixtures pass; new regression fixtures for 1–3; server tests.
 
-## M3 — Single-parse pipeline (1–2 weeks, the big one; est. further ~1.5–2.5× on large docs)
+## M3 — Single-parse pipeline — ✅ done 2026-07-16 (measured: 1.54–1.84× vs M1; overhead vs raw htmd now 1.46–2.07× — see honest scorecard in BENCHMARKS.md; remaining gap is cleanup-pass cost, tracked below)
 
 Today every conversion parses HTML **twice** (scraper for cleanup, then
 htmd's rcdom after a full string re-serialization at `cleanup.rs:52`), and
@@ -136,12 +136,25 @@ structural cost and the last thing between htmlmd and the minimal libraries.
    CI until the native renderer matches on every fixture, then flip the
    default.
 4. Fix `keep-only` to prune the existing tree instead of re-parsing
-   (`cleanup.rs:268`).
-5. Make `convert_to_writer` actually stream (`lib.rs:88–96` currently buffers
-   the whole document).
+   (`cleanup.rs:268`). ✅
+5. ~~Make `convert_to_writer` actually stream~~ **Deferred indefinitely with
+   rationale**: block-structured rendering, reference-definition placement,
+   and profile post-processing (frontmatter, plain-text strip, MDX escape)
+   all require the full document before the first byte is final. A streaming
+   mode would cover only a trivial subset dishonestly; revisit only if a
+   chunked-input use case materializes.
 
 Acceptance: `BENCHMARKS.md` shows wrapper-overhead-vs-htmd ratio ≤ ~1.3× on
 the plain corpus; memory high-water mark roughly halved on the 1.4 MB page.
+
+## M3.5 — Cleanup-pass fusion (follow-up from M3's honest scorecard)
+
+The post-M3 overhead vs raw htmd (1.46–2.07×) is dominated by `clean_html`'s
+~15 sequential DOM passes, each walking the tree with selector scans.
+Profile per-pass cost first (criterion bench on `clean_html_to_dom` alone),
+then fuse compatible passes into shared traversals and skip passes whose
+options are at no-op defaults. Target: overhead ≤ ~1.3× on all corpora.
+Parity contract: the differential suite must stay byte-identical.
 
 ## M4 — Prove it publicly (2–3 days)
 

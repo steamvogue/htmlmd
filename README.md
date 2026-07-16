@@ -181,4 +181,7 @@ See [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md).
 
 ## License
 
-Licensed under MIT OR Apache-2.0.
+Licensed under MIT OR Apache-2.0, with one exception: the files under
+`crates/htmlmd-core/src/native/` that are adapted from the
+[htmd](https://github.com/letmutex/htmd) crate are Apache-2.0 only (see their
+SPDX headers and attribution lines).

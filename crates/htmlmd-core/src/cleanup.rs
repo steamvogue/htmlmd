@@ -271,12 +271,12 @@ fn apply_keep_only(
         return Ok(());
     }
 
-    let mut chosen: Option<String> = None;
+    let mut chosen: Option<NodeId> = None;
     for s in selectors {
         match Selector::parse(s) {
             Ok(selector) => {
                 if let Some(el) = document.select(&selector).next() {
-                    chosen = Some(el.html());
+                    chosen = Some(el.id());
                     break;
                 }
             }
@@ -293,11 +293,55 @@ fn apply_keep_only(
         }
     }
 
-    if let Some(fragment_html) = chosen {
-        *document = Html::parse_document(&fragment_html);
+    if let Some(keep_id) = chosen {
+        prune_to_single_element(document, keep_id);
     }
 
     Ok(())
+}
+
+/// Restructure the live tree so the body contains only `keep_id` and the
+/// head is empty — equivalent to the old serialize-fragment-and-re-parse
+/// behavior (metadata is extracted before this pass), without paying for a
+/// third HTML parse.
+fn prune_to_single_element(document: &mut Html, keep_id: NodeId) {
+    static SEL_HEAD: Lazy<Selector> = Lazy::new(|| Selector::parse("head").unwrap());
+    static SEL_BODY: Lazy<Selector> = Lazy::new(|| Selector::parse("body").unwrap());
+
+    let head_id = document.select(&SEL_HEAD).next().map(|e| e.id());
+    let body_id = document.select(&SEL_BODY).next().map(|e| e.id());
+
+    let detach_children = |document: &mut Html, parent: NodeId| {
+        let child_ids: Vec<NodeId> = document
+            .tree
+            .get(parent)
+            .map(|n| n.children().map(|c| c.id()).collect())
+            .unwrap_or_default();
+        for id in child_ids {
+            if let Some(mut node) = document.tree.get_mut(id) {
+                node.detach();
+            }
+        }
+    };
+
+    if let Some(hid) = head_id {
+        detach_children(document, hid);
+    }
+
+    let Some(bid) = body_id else {
+        return;
+    };
+    // Keeping the body itself: emptied head is all that's needed.
+    if keep_id == bid {
+        return;
+    }
+    if let Some(mut keep) = document.tree.get_mut(keep_id) {
+        keep.detach();
+    }
+    detach_children(document, bid);
+    if let Some(mut body) = document.tree.get_mut(bid) {
+        body.append_id(keep_id);
+    }
 }
 
 fn remove_hidden(document: &mut Html, options: &ConversionOptions) {

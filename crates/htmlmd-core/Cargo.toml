@@ -9,11 +9,15 @@ rust-version.workspace = true
 description = "Core library for fast, configurable HTML to Markdown conversion."
 
 [features]
-default = ["parallel"]
+default = ["parallel", "backend-htmd"]
 parallel = ["rayon"]
+# The pre-M3 htmd-based backend, kept during the native-renderer transition
+# for differential parity testing. Disable with --no-default-features
+# (plus "parallel" if wanted) for a single-engine build.
+backend-htmd = ["dep:htmd"]
 
 [dependencies]
-htmd = { workspace = true }
+htmd = { workspace = true, optional = true }
 scraper = { workspace = true }
 markup5ever = { workspace = true }
 html5ever = { workspace = true }
@@ -35,6 +39,8 @@ insta = { workspace = true }
 tempfile = { workspace = true }
 criterion = { workspace = true }
 mimalloc = { workspace = true }
+# Benches always need raw htmd as the baseline, independent of backend-htmd.
+htmd = { workspace = true }
 
 [[bench]]
 name = "convert_bench"

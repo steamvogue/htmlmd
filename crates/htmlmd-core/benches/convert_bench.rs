@@ -185,6 +185,15 @@ fn bench_corpus(c: &mut Criterion, name: &str, html: &str) {
         });
     }
 
+    // The pre-M3 double-parse pipeline, for the historical record.
+    #[cfg(feature = "backend-htmd")]
+    group.bench_function("htmd-backend", |b| {
+        use htmlmd_core::{HtmdBackend, convert_with_backend};
+        let backend = HtmdBackend::new();
+        let options = ConversionOptions::default();
+        b.iter(|| convert_with_backend(black_box(html), black_box(&options), &backend).unwrap())
+    });
+
     // Raw htmd on the same input: the "minimal library" baseline. The ratio
     // htmlmd/htmd is the wrapper overhead tracked by docs/ROADMAP.md M3.
     let raw = htmd::HtmlToMarkdown::builder().build();

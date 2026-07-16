@@ -4,10 +4,13 @@ pub mod backend;
 pub mod cleanup;
 pub mod diagnostic;
 pub mod error;
+#[cfg(feature = "backend-htmd")]
 pub mod htmd_backend;
+#[cfg(feature = "backend-htmd")]
 mod htmd_handlers;
 pub(crate) mod native;
 pub mod options;
+mod postprocess;
 mod regex_cache;
 pub mod result;
 pub mod rewrite;
@@ -16,6 +19,7 @@ use std::io::Write;
 
 pub use backend::ConverterBackend;
 pub use error::{Error, Result};
+#[cfg(feature = "backend-htmd")]
 pub use htmd_backend::HtmdBackend;
 pub use native::NativeBackend;
 pub use options::ConversionOptions;
@@ -35,7 +39,7 @@ use diagnostic::Diagnostic;
 /// assert_eq!(md.markdown.trim(), "# Hello");
 /// ```
 pub fn convert(html: &str, options: &ConversionOptions) -> Result<ConversionResult> {
-    let backend = HtmdBackend::new();
+    let backend = NativeBackend::new();
     convert_with_backend(html, options, &backend)
 }
 
