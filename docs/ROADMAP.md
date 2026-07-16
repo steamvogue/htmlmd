@@ -156,7 +156,16 @@ then fuse compatible passes into shared traversals and skip passes whose
 options are at no-op defaults. Target: overhead ≤ ~1.3× on all corpora.
 Parity contract: the differential suite must stay byte-identical.
 
-## M4 — Prove it publicly (2–3 days)
+## M4 — Prove it publicly — ✅ done 2026-07-16
+
+Cross-tool harness in `benches/compare/`, results and honest losses in
+BENCHMARKS.md, 10 property/robustness tests, tag-triggered release workflow,
+crates.io metadata (`cargo publish --dry-run` passes). The property tests
+found and forced the fix of a real stack-overflow DoS (limits defaulted to
+unlimited). `cargo-fuzz` was not added: proptest with the pseudo-HTML
+grammar covers the same ground for this codebase (no `unsafe`, html5ever
+handles the byte-level parsing) and needs no nightly toolchain — revisit if
+a crash ever surfaces that proptest misses.
 
 1. **Cross-tool benchmark harness** (`benches/compare/`): scripted runs of
    htmlmd vs raw htmd, fast_html2md, mdka, Go html-to-markdown v2, turndown
