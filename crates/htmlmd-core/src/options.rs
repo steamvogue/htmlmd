@@ -46,8 +46,6 @@ pub enum HeadingStyle {
     Atx,
     /// Setext style: underlined H1/H2.
     Setex,
-    /// Keep the original HTML heading representation when no Markdown equivalent exists.
-    Keep,
 }
 
 /// Bullet list marker.
@@ -254,8 +252,6 @@ pub enum FormHandling {
     Drop,
     /// Render readable text labels and values.
     Readable,
-    /// Render as checklist.
-    Checklist,
 }
 
 /// `<details>` / `<summary>` handling.
@@ -321,9 +317,9 @@ pub enum MathOutput {
     /// Preserve original HTML/math markup.
     #[default]
     PreserveHtml,
-    /// `$...$`
+    /// `$...$` inline, `$$...$$` for display math.
     InlineDollar,
-    /// `$$...$$`
+    /// `$$...$$` for all math, including inline.
     BlockDollar,
     /// Fenced math block.
     Fenced,

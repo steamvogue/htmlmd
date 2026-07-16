@@ -364,13 +364,8 @@ fn math_output(text: &str, block: bool, mode: MathOutput) -> String {
                 format!("${text}$")
             }
         }
-        MathOutput::BlockDollar => {
-            if block {
-                format!("\n\n$${text}$$\n\n")
-            } else {
-                format!("${text}$")
-            }
-        }
+        // Display delimiters for every expression, inline ones included.
+        MathOutput::BlockDollar => format!("\n\n$${text}$$\n\n"),
         MathOutput::Fenced => {
             if block {
                 format!("\n\n```math\n{text}\n```\n\n")

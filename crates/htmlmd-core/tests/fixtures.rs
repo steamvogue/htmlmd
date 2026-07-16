@@ -404,6 +404,24 @@ fn obsidian_profile_wikilinks_and_frontmatter() {
 }
 
 #[test]
+fn math_block_dollar_uses_display_delimiters_for_inline_math() {
+    // `block-dollar` was byte-identical to `inline-dollar` until M5; this
+    // guards the distinction its name promises.
+    let html = r#"<p>Inline math: <script type="math/tex">E=mc^2</script>.</p>"#;
+
+    let mut inline = ConversionOptions::extended();
+    inline.semantic.math.output = htmlmd_core::options::MathOutput::InlineDollar;
+    let md = convert(html, &inline).unwrap().markdown;
+    assert!(md.contains("$E=mc^2$"), "{md}");
+    assert!(!md.contains("$$"), "{md}");
+
+    let mut block = ConversionOptions::extended();
+    block.semantic.math.output = htmlmd_core::options::MathOutput::BlockDollar;
+    let md = convert(html, &block).unwrap().markdown;
+    assert!(md.contains("$$E=mc^2$$"), "{md}");
+}
+
+#[test]
 fn pandoc_profile_preserves_raw_html() {
     let md = convert(
         "<p>Press <kbd>Ctrl</kbd>.</p>",

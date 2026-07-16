@@ -1,5 +1,8 @@
 # htmlmd
 
+[![CI](https://github.com/steamvogue/htmlmd/actions/workflows/ci.yml/badge.svg)](https://github.com/steamvogue/htmlmd/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
 A fast, configurable, cross-platform HTML-to-Markdown converter written in
 Rust — available as a library (`htmlmd-core`), a CLI (`htmlmd`), and an HTTP
 API server (`htmlmd-server`).
@@ -207,8 +210,11 @@ See [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md).
 - [`docs/BUILD_AND_DEPLOY.md`](docs/BUILD_AND_DEPLOY.md) – building per platform, deployment.
 - [`docs/PACKAGING.md`](docs/PACKAGING.md) – winget and apt packages.
 - [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md) – the HTTP API server.
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) – method, results, and the reproducible harness.
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) – project status, workspace layout, contributor/AI-assistant notes.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) – performance & quality roadmap.
+- [`docs/RELEASING.md`](docs/RELEASING.md) – release runbook.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`CHANGELOG.md`](CHANGELOG.md)
 
 ## License
 

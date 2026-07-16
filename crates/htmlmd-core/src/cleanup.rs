@@ -665,7 +665,7 @@ fn select_meta(document: &Html, selector: &str, attr: &str) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
-// --- Phase 2 semantic / media / image handling ---
+// --- semantic / media / image handling ---
 
 fn apply_image_handling(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
     if options.cleanup.image_mode == ImageMode::Skip {
@@ -679,15 +679,12 @@ fn apply_image_handling(document: &mut Html, options: &ConversionOptions, ids: &
         if options.cleanup.preserve_image_metadata {
             append_image_metadata(document, id);
         }
-        match options.cleanup.image_mode {
-            ImageMode::AltText => {
-                let alt = image_alt(document, id);
-                replace_with_text(document, id, &alt);
-            }
-            ImageMode::Reference => {
-                // Phase 2 fallback: htmd already produces inline images by default.
-            }
-            _ => {}
+        // Inline and reference images are emitted by the renderer's image
+        // handler, which needs the element intact; only alt-text mode
+        // rewrites the DOM here.
+        if options.cleanup.image_mode == ImageMode::AltText {
+            let alt = image_alt(document, id);
+            replace_with_text(document, id, &alt);
         }
     }
 }
@@ -924,9 +921,6 @@ fn apply_form_handling(document: &mut Html, options: &ConversionOptions, ids: &[
                 replace_with_text(document, id, &text);
             }
         }
-        FormHandling::Checklist => {
-            // Phase 3: checklist representation.
-        }
     }
 }
 
@@ -1074,7 +1068,7 @@ fn apply_heading_offset(document: &mut Html, options: &ConversionOptions) {
     }
 }
 
-// --- Phase 3: custom rules, mermaid, tables, language detection ---
+// --- custom rules, mermaid, tables, language detection ---
 
 fn apply_custom_rules(
     document: &mut Html,

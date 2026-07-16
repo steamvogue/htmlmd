@@ -31,8 +31,8 @@ impl CompiledRewriteRules {
 
 /// Rewrite a single URL attribute value.
 ///
-/// For `srcset`, only the first URL is rewritten according to the responsive
-/// image policy. In Phase 1 this is a simple first-candidate rewrite.
+/// For `srcset`, only the URL selected by the responsive-image policy is
+/// rewritten.
 pub fn rewrite_url_attr(
     value: &str,
     attr_name: &str,

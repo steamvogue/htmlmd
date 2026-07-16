@@ -12,11 +12,10 @@ keywords = ["html", "markdown", "converter", "commonmark"]
 categories = ["text-processing", "web-programming"]
 
 [features]
-default = ["parallel", "backend-htmd"]
-parallel = ["rayon"]
+default = ["backend-htmd"]
 # The pre-M3 htmd-based backend, kept during the native-renderer transition
-# for differential parity testing. Disable with --no-default-features
-# (plus "parallel" if wanted) for a single-engine build.
+# for differential parity testing. Disable with --no-default-features for a
+# single-engine build.
 backend-htmd = ["dep:htmd"]
 
 [dependencies]
@@ -35,7 +34,6 @@ once_cell = { workspace = true }
 indexmap = { workspace = true }
 unicode-normalization = { workspace = true }
 log = { workspace = true }
-rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 insta = { workspace = true }

@@ -184,17 +184,38 @@ a crash ever surfaces that proptest misses.
    `keywords`, `categories`, `readme` to each crate's `Cargo.toml`;
    `cargo-binstall` metadata for prebuilt installs.
 
-## M5 — Cosmetic / housekeeping (can run anytime)
+## M5 — Cosmetic / housekeeping — ✅ done 2026-07-16
 
-- ~~`LICENSE-MIT` + `LICENSE-APACHE` files~~ (done — dual license per the
-  existing `MIT OR Apache-2.0` declarations).
-- README badges (CI, crates.io, docs.rs, license) once public.
-- `CHANGELOG.md` (Keep a Changelog format) and `CONTRIBUTING.md`.
-- Retire the "Phase 1/2/3" comments in source (`cleanup.rs:437,462,716,861`,
-  `rewrite.rs:9`, `options.rs:9–14,621`) — the phase model is done; comments
-  should state what the code does, not project history.
-- Remove the unused `parallel`/`rayon` optional dependency from
-  `htmlmd-core` (only the CLI uses rayon).
-- Decide the fate of `MathOutput::BlockDollar` (currently byte-identical to
-  `InlineDollar`, `htmd_handlers.rs:412–425`) and `HeadingStyle::Keep`
-  (silently maps to Atx).
+- `LICENSE-MIT` + `LICENSE-APACHE` files. ✅
+- README badges: CI and license added. crates.io/docs.rs badges are deliberately
+  deferred until the crates are actually published — a badge pointing at a
+  nonexistent crate is worse than no badge.
+- `CHANGELOG.md` (Keep a Changelog) and `CONTRIBUTING.md`. ✅
+- Phase 1/2/3 comments retired from source and docs. ✅
+- Unused `parallel`/`rayon` dependency removed from `htmlmd-core`. ✅
+- Dead-variant decisions, applying M2's rule (make it real or delete it): ✅
+  - `MathOutput::BlockDollar` → **made real**: emits `$$…$$` for inline math
+    too, as the name implies. Regression test added.
+  - `HeadingStyle::Keep` → **deleted** (silently behaved as `atx`).
+  - `FormHandling::Checklist` → **deleted** (did nothing).
+  - Unlike removed *fields*, an unknown enum *variant* is a load error, so
+    these are breaking for configs that used them — documented in
+    OPTION_REFERENCE.md and CHANGELOG.md. Acceptable pre-1.0.
+
+## Post-1.0 candidates
+
+Not scheduled; recorded so they are not rediscovered from scratch.
+
+- **`--print-default-config` round-trip test.** The printed TOML should parse
+  back to `ConversionOptions::default()`; nothing asserts it today.
+- **Cleanup-pass fusion, round 3.** `apply_removals` (2.6 ms) and
+  `apply_url_rewriting` (3.1 ms) still dominate a ~7 ms cleanup on a 1 MB
+  document; both walk the whole tree separately from `collect_element_buckets`
+  and could share one traversal.
+- **Parse-side depth guard.** `max-dom-depth` is enforced after parsing, but
+  html5ever is quadratic in nesting depth, so pathological input still burns
+  CPU before the limit applies. A cheap pre-parse nesting estimate over the
+  raw bytes could reject it earlier.
+- **`FormHandling::Checklist`, for real this time.** `<input type=checkbox>`
+  inside a form → `- [x] label`. The task-list handler already does the marker
+  half; deleted in M5 rather than shipped as a stub.

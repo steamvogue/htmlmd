@@ -188,7 +188,6 @@ pub enum ProfileArg {
 pub enum HeadingStyleArg {
     Atx,
     Setex,
-    Keep,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

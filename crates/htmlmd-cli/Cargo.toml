@@ -39,7 +39,7 @@ path = "src/main.rs"
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["htmlmd-core/parallel", "rayon"]
+parallel = ["rayon"]
 mimalloc = ["dep:mimalloc"]
 
 [dependencies]

@@ -8,7 +8,7 @@ Legend:
 
 ## Top-level
 
-| Option    | Type   | Default      | Phase 2 | Description                              |
+| Option    | Type   | Default      | Status  | Description                              |
 |-----------|--------|--------------|---------|------------------------------------------|
 | `profile` | string | `commonmark` | ✅      | Output profile (`commonmark`, `gfm`, `extended`, `pandoc`, `obsidian`, `mdx-safe`, `plain-text`)  |
 | `strict`  | bool   | `false`      | ✅      | Turn warnings into errors                |
@@ -17,7 +17,7 @@ Legend:
 
 | Option                    | Type   | Default       | Status | Notes                                        |
 |---------------------------|--------|---------------|--------|----------------------------------------------|
-| `heading-style`           | enum   | `atx`         | ✅     | `atx`, `setex`, `keep` maps to `atx`         |
+| `heading-style`           | enum   | `atx`         | ✅     | `atx`, `setex`                               |
 | `bullet`                  | enum   | `hyphen`      | ✅     | `hyphen`/`plus` map to dash; `asterisk` works|
 | `code-fence`              | enum   | `backticks`   | ✅     | `backticks` or `tildes`                      |
 | `hard-break-style`        | enum   | `two-spaces`  | ✅     | `two-spaces` or `backslash`                  |
@@ -55,7 +55,7 @@ Legend:
 | `preserve-image-metadata` | bool     | `false`                          | ✅     | Append `widthxheight` to `alt` |
 | `image-mode`              | enum     | `inline`                         | ✅     | See `[render].image-mode` mirror |
 | `media-policy`            | enum     | `inline`                         | ✅     | `drop`, `placeholder` wired; `inline`/`link` partial |
-| `form-handling`           | enum     | `drop`                           | ✅     | `drop`, `readable` wired; `checklist` reserved |
+| `form-handling`           | enum     | `drop`                           | ✅     | `drop`, `readable`                             |
 | `details-handling`        | enum     | `expand`                         | ✅     | `expand`, `summary-only`, `drop` |
 | `custom-element-policy`   | enum     | `unwrap`                         | ✅     | `unwrap`, `drop`, `preserve-html` for hyphenated tags |
 
@@ -71,7 +71,7 @@ Legend:
 | `detect-languages`        | bool     | `true`                           | ✅     | Heuristic language detection for bare code blocks |
 | `definition-lists`        | bool     | `false`                          | ✅     | Pandoc-style definition lists |
 | `footnotes`               | bool     | `false`                          | ✅     | `[^n]` refs and `[^n]: ...` defs |
-| `math`                    | object   | `enabled: false`                 | ✅     | `inline-dollar`, `block-dollar`, `fenced`, `plain`, `preserve-html` |
+| `math`                    | object   | `enabled: false`                 | ✅     | `output`: `inline-dollar` (`$…$`, `$$…$$` for display), `block-dollar` (`$$…$$` always), `fenced`, `plain`, `preserve-html` |
 | `mermaid`                 | enum     | `fenced`                         | ✅     | `fenced`, `preserve-html`, `drop` |
 
 ## `[extension]` – Extensibility
@@ -112,7 +112,7 @@ Legend:
 | `--jobs`                      | ✅     | Rayon thread-pool size |
 | `--quiet` / `--verbose`       | ✅     | Output verbosity |
 | `--profile`                   | ✅     | Output profile shorthand |
-| `--heading-style`             | ✅     | `atx`, `setex`, `keep` |
+| `--heading-style`             | ✅     | `atx`, `setex` |
 | `--bullet`                    | ✅     | `hyphen`, `asterisk`, `plus` |
 | `--link-style`                | ✅     | `inline`, `reference`, `collapsed-reference`, `shortcut-reference` |
 | `--reference-placement`       | ✅     | `end`, `adjacent`, `section-end` |
@@ -164,3 +164,13 @@ have no effect.
 
 Two formerly inert options were wired instead of removed: `heading-offset`
 and `task-lists` (see the `[semantic]` table above).
+
+Enum *variants* that behaved as no-ops were removed too. Unlike unknown keys,
+an unknown variant is a load error, so a config using one must be updated:
+
+- `heading-style = "keep"` — silently rendered ATX. Use `"atx"`.
+- `form-handling = "checklist"` — did nothing. Use `"readable"` or `"drop"`.
+
+And one was made real rather than removed: `math.output = "block-dollar"` was
+byte-identical to `"inline-dollar"`; it now emits `$$…$$` for inline math as
+its name implies.

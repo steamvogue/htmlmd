@@ -12,7 +12,6 @@ impl From<HeadingStyleArg> for core::HeadingStyle {
         match v {
             HeadingStyleArg::Atx => Self::Atx,
             HeadingStyleArg::Setex => Self::Setex,
-            HeadingStyleArg::Keep => Self::Keep,
         }
     }
 }

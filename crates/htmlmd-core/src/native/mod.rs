@@ -245,7 +245,7 @@ fn build_native_options(options: &ConversionOptions) -> Options {
     let mut o = Options::default();
 
     o.heading_style = match options.render.heading_style {
-        HeadingStyle::Atx | HeadingStyle::Keep => options::HeadingStyle::Atx,
+        HeadingStyle::Atx => options::HeadingStyle::Atx,
         HeadingStyle::Setex => options::HeadingStyle::Setex,
     };
 

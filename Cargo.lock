@@ -901,7 +901,6 @@ dependencies = [
  "mimalloc",
  "once_cell",
  "proptest",
- "rayon",
  "regex",
  "scraper",
  "serde",
