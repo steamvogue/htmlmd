@@ -54,6 +54,8 @@ mimalloc = "0.1"
 
 # Dev dependencies
 insta = { version = "1.42", features = ["json", "redactions"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 tempfile = "3.14"
 assert_cmd = "2.0"
 predicates = "3.1"

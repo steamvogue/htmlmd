@@ -114,7 +114,7 @@ fn rewrite_srcset(
     rewrite_single_url(url_part, base, options, rules, diagnostics)
 }
 
-fn choose_largest_srcset<'a>(candidates: &'a [&'a str]) -> &'a str {
+pub(crate) fn choose_largest_srcset<'a>(candidates: &'a [&'a str]) -> &'a str {
     candidates
         .iter()
         .max_by_key(|c| {

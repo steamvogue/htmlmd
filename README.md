@@ -63,7 +63,7 @@ htmlmd -o page.md page.html
 | `commonmark` | Conservative CommonMark                                   |
 | `gfm`        | Tables, task lists, strikethrough, autolinks              |
 | `extended`   | GFM + footnotes, definition lists, math, alerts, mermaid  |
-| `pandoc`     | Raw HTML preserved, smart punctuation                     |
+| `pandoc`     | Raw HTML preserved                                        |
 | `obsidian`   | Wikilinks, YAML frontmatter, callouts                     |
 | `mdx-safe`   | Raw HTML stripped/unwrapped, JSX braces escaped           |
 | `plain-text` | Markdown stripped to readable text                        |

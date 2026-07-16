@@ -23,6 +23,26 @@ You should see:
 INFO htmlmd_server: htmlmd server listening on http://127.0.0.1:3000
 ```
 
+To listen on a different address or port:
+
+```bash
+./target/release/htmlmd-server --bind 0.0.0.0:8080
+```
+
+The server shuts down gracefully on `Ctrl-C` (SIGINT) and, on Unix, SIGTERM: in-flight requests are allowed to finish before the process exits.
+
+## Configuration
+
+| Flag / variable | Description | Default |
+| --- | --- | --- |
+| `--bind <ADDR:PORT>` | Address and port to listen on | `127.0.0.1:3000` |
+| `HTMLMD_BIND` | Bind address, used when `--bind` is absent | `127.0.0.1:3000` |
+| `HTMLMD_MAX_BODY_BYTES` | Maximum request body size in bytes; larger bodies get `413 Payload Too Large` | `67108864` (64 MiB) |
+| `-h`, `--help` | Print usage and exit | |
+| `-V`, `--version` | Print version and exit | |
+
+The `--bind` flag takes precedence over `HTMLMD_BIND`. An invalid bind address or `HTMLMD_MAX_BODY_BYTES` value prints an error to stderr and exits with code 2; a failure to bind the socket (for example, port already in use) exits with code 1.
+
 ## Endpoints
 
 ### `GET /health`
@@ -146,6 +166,7 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/htmlmd-server
+Environment=HTMLMD_BIND=127.0.0.1:3000
 Restart=on-failure
 User=www-data
 Group=www-data
@@ -188,6 +209,7 @@ RUN cargo build -p htmlmd-server --release
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/htmlmd-server /usr/local/bin/htmlmd-server
+ENV HTMLMD_BIND=0.0.0.0:3000
 EXPOSE 3000
 ENTRYPOINT ["htmlmd-server"]
 ```
@@ -201,6 +223,6 @@ docker run -p 3000:3000 htmlmd-server
 
 ## Notes
 
-- The server currently listens on `127.0.0.1:3000`. For production, run it behind a reverse proxy and restrict access as needed.
-- The API returns `422 Unprocessable Entity` if conversion fails (for example, because of a strict-mode limit error).
+- The server listens on `127.0.0.1:3000` by default; use `--bind` or `HTMLMD_BIND` to change that. For production, run it behind a reverse proxy and restrict access as needed.
+- The API returns `422 Unprocessable Entity` if conversion fails (for example, because of a strict-mode limit error), `400 Bad Request` for malformed JSON, and `413 Payload Too Large` when the request body exceeds `HTMLMD_MAX_BODY_BYTES`.
 - For high-throughput deployments, run multiple instances behind a load balancer; the conversion itself is CPU-bound.

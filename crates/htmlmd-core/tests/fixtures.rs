@@ -322,6 +322,42 @@ fn custom_rules_drop_and_template() {
 }
 
 #[test]
+fn custom_rules_support_full_selectors_and_priority() {
+    let mut opts = ConversionOptions::extended();
+    opts.extension.custom_rules = vec![
+        // Class-only selector (no tag): previously silently ignored by the
+        // handler path; must work now.
+        CustomRule {
+            selectors: vec![".callout".to_string()],
+            action: CustomRuleAction::MarkdownTemplate,
+            template: Some("> {text}".to_string()),
+            priority: 1,
+        },
+        // Attribute selector with a template reading an attribute.
+        CustomRule {
+            selectors: vec!["[data-term]".to_string()],
+            action: CustomRuleAction::MarkdownTemplate,
+            template: Some("*{attr:data-term}*: {text}".to_string()),
+            priority: 0,
+        },
+        // Lower-priority rule matching the same .callout element: the
+        // higher-priority rule above must win.
+        CustomRule {
+            selectors: vec![".callout".to_string()],
+            action: CustomRuleAction::MarkdownTemplate,
+            template: Some("LOSER {text}".to_string()),
+            priority: 0,
+        },
+    ];
+    let html = "<div class='callout'>heads up</div>\
+                <p><span data-term='API'>application interface</span></p>";
+    let md = convert(html, &opts).unwrap().markdown;
+    assert!(md.contains("> heads up"), "{md}");
+    assert!(!md.contains("LOSER"), "{md}");
+    assert!(md.contains("*API*: application interface"), "{md}");
+}
+
+#[test]
 fn custom_rules_link_and_image() {
     let mut opts = ConversionOptions::extended();
     opts.extension.custom_rules = vec![
@@ -361,9 +397,9 @@ fn obsidian_profile_wikilinks_and_frontmatter() {
     let md = convert(html, &opts).unwrap().markdown;
     eprintln!("OBSIDIAN MD:\n{md}");
     assert!(md.contains("---"));
-    assert!(md.contains("title: My Note"));
-    assert!(md.contains("description: A note about things"));
-    assert!(md.contains("canonical_url: https://example.com/note"));
+    assert!(md.contains("title: \"My Note\""));
+    assert!(md.contains("description: \"A note about things\""));
+    assert!(md.contains("canonical_url: \"https://example.com/note\""));
     assert!(md.contains("[[Another page|another note]]"));
 }
 
@@ -460,6 +496,49 @@ fn reference_images() {
     assert!(md.contains("![B][img2]"));
     assert!(md.contains("[img1]: a.png"));
     assert!(md.contains("[img2]: b.png \"pic\""));
+}
+
+#[test]
+fn gfm_task_lists() {
+    let html = "<ul><li><input type=\"checkbox\" checked> done</li>\
+                <li><input type=\"checkbox\"> todo</li></ul>";
+    let md = convert(html, &ConversionOptions::gfm()).unwrap().markdown;
+    assert!(md.contains("[x] done"), "{md}");
+    assert!(md.contains("[ ] todo"), "{md}");
+}
+
+#[test]
+fn task_lists_disabled() {
+    let mut opts = ConversionOptions::gfm();
+    opts.semantic.task_lists = false;
+    let html = "<ul><li><input type=\"checkbox\" checked> done</li></ul>";
+    let md = convert(html, &opts).unwrap().markdown;
+    assert!(!md.contains("[x]"), "{md}");
+    assert!(md.contains("done"), "{md}");
+}
+
+#[test]
+fn heading_offset_shifts_levels() {
+    let mut opts = ConversionOptions::default();
+    opts.semantic.heading_offset = 1;
+    let md = convert("<h1>Title</h1>", &opts).unwrap().markdown;
+    assert!(md.contains("## Title"), "{md}");
+}
+
+#[test]
+fn heading_offset_clamps_to_valid_range() {
+    let mut opts = ConversionOptions::default();
+    opts.semantic.heading_offset = 2;
+    let md = convert("<h5>Five</h5><h6>Six</h6>", &opts)
+        .unwrap()
+        .markdown;
+    assert!(md.contains("###### Five"), "{md}");
+    assert!(md.contains("###### Six"), "{md}");
+
+    opts.semantic.heading_offset = -3;
+    let md = convert("<h2>Two</h2>", &opts).unwrap().markdown;
+    assert!(md.contains("# Two"), "{md}");
+    assert!(!md.contains("## Two"), "{md}");
 }
 
 #[test]

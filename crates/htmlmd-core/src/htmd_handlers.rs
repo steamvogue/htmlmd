@@ -44,6 +44,7 @@ pub fn build_converter(options: &ConversionOptions) -> HtmlToMarkdown {
     }
 
     builder = add_semantic_handlers(builder, options);
+    builder = add_task_list_handlers(builder, options);
     builder = add_footnote_handlers(builder, options);
     builder = add_definition_list_handlers(builder, options);
     builder = add_table_handlers(builder, options);
@@ -228,6 +229,39 @@ fn address_handler(h: &dyn Handlers, e: Element<'_>) -> Option<HandlerResult> {
         Some("".into())
     } else {
         Some(format!("\n\n{content}\n\n").into())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GFM task lists
+// ---------------------------------------------------------------------------
+
+fn add_task_list_handlers(
+    mut builder: HtmlToMarkdownBuilder,
+    options: &ConversionOptions,
+) -> HtmlToMarkdownBuilder {
+    if !options.semantic.task_lists {
+        return builder;
+    }
+
+    builder = builder.add_handler(vec!["input"], task_list_checkbox_handler);
+    builder
+}
+
+fn task_list_checkbox_handler(h: &dyn Handlers, e: Element<'_>) -> Option<HandlerResult> {
+    let is_checkbox = e
+        .attrs
+        .iter()
+        .any(|a| a.name.local.as_ref() == "type" && a.value.eq_ignore_ascii_case("checkbox"));
+    if !is_checkbox {
+        return h.fallback(e);
+    }
+    let checked = e.attrs.iter().any(|a| a.name.local.as_ref() == "checked");
+    // Raw marker text: handler output bypasses Markdown escaping.
+    if checked {
+        Some("[x] ".into())
+    } else {
+        Some("[ ] ".into())
     }
 }
 
@@ -826,6 +860,26 @@ fn next_reference_id(state: &Mutex<ReferenceState>) -> usize {
     st.counter
 }
 
+/// Emit and clear the pending reference definitions (shared by the link and
+/// image handlers' `append`).
+fn flush_pending_definitions(
+    state: &Mutex<ReferenceState>,
+    placement: ReferencePlacement,
+) -> Option<String> {
+    if placement == ReferencePlacement::Adjacent {
+        return None;
+    }
+    let defs = {
+        let mut st = lock_reference_state(state);
+        std::mem::take(&mut st.pending)
+    };
+    if defs.is_empty() {
+        None
+    } else {
+        Some(format!("\n\n{}\n\n", defs.join("\n")))
+    }
+}
+
 fn add_reference_handlers(
     mut builder: HtmlToMarkdownBuilder,
     options: &ConversionOptions,
@@ -920,18 +974,7 @@ impl htmd::element_handler::ElementHandler for ReferenceLinkHandler {
     }
 
     fn append(&self) -> Option<String> {
-        if self.placement == ReferencePlacement::Adjacent {
-            return None;
-        }
-        let defs = {
-            let mut st = lock_reference_state(&self.state);
-            std::mem::take(&mut st.pending)
-        };
-        if defs.is_empty() {
-            None
-        } else {
-            Some(format!("\n\n{}\n\n", defs.join("\n")))
-        }
+        flush_pending_definitions(&self.state, self.placement)
     }
 }
 
@@ -976,18 +1019,7 @@ impl htmd::element_handler::ElementHandler for ReferenceImageHandler {
     }
 
     fn append(&self) -> Option<String> {
-        if self.placement == ReferencePlacement::Adjacent {
-            return None;
-        }
-        let defs = {
-            let mut st = lock_reference_state(&self.state);
-            std::mem::take(&mut st.pending)
-        };
-        if defs.is_empty() {
-            None
-        } else {
-            Some(format!("\n\n{}\n\n", defs.join("\n")))
-        }
+        flush_pending_definitions(&self.state, self.placement)
     }
 }
 
@@ -1021,57 +1053,52 @@ impl htmd::element_handler::ElementHandler for HeadingFlushHandler {
 // ---------------------------------------------------------------------------
 
 fn add_custom_rule_handlers(
-    mut builder: HtmlToMarkdownBuilder,
+    builder: HtmlToMarkdownBuilder,
     options: &ConversionOptions,
 ) -> HtmlToMarkdownBuilder {
     if options.extension.custom_rules.is_empty() {
         return builder;
     }
 
-    let mut indexed: Vec<_> = options.extension.custom_rules.iter().enumerate().collect();
-    // Register lower priority first so higher priority handlers are consulted last
-    // (and therefore win when htmd searches handlers in reverse order).
-    indexed.sort_by(|a, b| a.1.priority.cmp(&b.1.priority));
-
-    for (_index, rule) in indexed {
-        for selector in &rule.selectors {
-            if let Some(tag) = simple_selector_tag(selector) {
-                builder = builder.add_handler(
-                    vec![tag.as_str()],
-                    CustomRuleHandler {
-                        selector: selector.clone(),
-                        rule: rule.clone(),
-                    },
-                );
-            }
-        }
-    }
-
-    builder
+    // Selector matching and priority resolution happen in the DOM pass
+    // (`cleanup::apply_custom_rule_markers`), which renames each claimed
+    // element to `htmlmdrule` and records the winning rule's index in
+    // `data-htmlmd-rule`. One handler renders them all.
+    builder.add_handler(
+        vec!["htmlmdrule"],
+        CustomRuleHandler {
+            rules: options.extension.custom_rules.clone(),
+        },
+    )
 }
 
 #[derive(Debug, Clone)]
 struct CustomRuleHandler {
-    selector: String,
-    rule: CustomRule,
+    rules: Vec<CustomRule>,
 }
 
 impl htmd::element_handler::ElementHandler for CustomRuleHandler {
     fn handle(&self, handlers: &dyn Handlers, element: Element<'_>) -> Option<HandlerResult> {
-        if !element_matches_simple_selector(&element, &self.selector) {
+        let rule = element
+            .attrs
+            .iter()
+            .find(|a| a.name.local.as_ref() == "data-htmlmd-rule")
+            .and_then(|a| a.value.parse::<usize>().ok())
+            .and_then(|index| self.rules.get(index));
+        let Some(rule) = rule else {
             return handlers.fallback(element);
-        }
+        };
 
-        match self.rule.action {
+        match rule.action {
             CustomRuleAction::MarkdownTemplate => {
-                let template = self.rule.template.as_deref()?;
+                let template = rule.template.as_deref()?;
                 let text = handlers
                     .walk_children(element.node)
                     .content
                     .trim()
                     .to_string();
                 static ATTR_RE: once_cell::sync::Lazy<regex::Regex> =
-                    once_cell::sync::Lazy::new(|| regex::Regex::new(r"\{attr:(\w+)\}").unwrap());
+                    once_cell::sync::Lazy::new(|| regex::Regex::new(r"\{attr:([\w-]+)\}").unwrap());
                 let mut result = template.replace("{text}", &text);
                 for caps in ATTR_RE.captures_iter(template) {
                     let placeholder = &caps[0];
@@ -1095,7 +1122,7 @@ impl htmd::element_handler::ElementHandler for CustomRuleHandler {
                 if text.is_empty() {
                     return Some("".into());
                 }
-                let lang = self.rule.template.as_deref().unwrap_or("");
+                let lang = rule.template.as_deref().unwrap_or("");
                 let fence = make_code_fence(&text, 3);
                 Some(format!("\n\n{fence}{lang}\n{text}\n{fence}\n\n").into())
             }
@@ -1145,98 +1172,6 @@ impl htmd::element_handler::ElementHandler for CustomRuleHandler {
             _ => handlers.fallback(element),
         }
     }
-}
-
-fn simple_selector_tag(selector: &str) -> Option<String> {
-    let trimmed = selector.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let first = trimmed.chars().next().unwrap();
-    if matches!(first, '.' | '#' | '[' | '*') {
-        return None;
-    }
-    let end = trimmed
-        .find(['.', '#', '[', ':', ' ', '>', '+', '~'].as_slice())
-        .unwrap_or(trimmed.len());
-    let tag = &trimmed[..end];
-    if tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        Some(tag.to_ascii_lowercase())
-    } else {
-        None
-    }
-}
-
-fn element_matches_simple_selector(element: &Element<'_>, selector: &str) -> bool {
-    let trimmed = selector.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    let mut rest = trimmed;
-    // Optional tag.
-    let first = rest.chars().next().unwrap();
-    if first.is_ascii_alphabetic() {
-        let end = rest
-            .find(['.', '#', '[', ':', ' ', '>', '+', '~'].as_slice())
-            .unwrap_or(rest.len());
-        let tag = &rest[..end];
-        if !element.tag.eq_ignore_ascii_case(tag) {
-            return false;
-        }
-        rest = &rest[end..];
-    }
-
-    let mut required_classes = Vec::new();
-    let mut required_id: Option<&str> = None;
-
-    while !rest.is_empty() {
-        match rest.chars().next().unwrap() {
-            '.' => {
-                let end = rest[1..]
-                    .find(['.', '#', '[', ':', ' ', '>', '+', '~'].as_slice())
-                    .map(|i| i + 1)
-                    .unwrap_or(rest.len());
-                required_classes.push(&rest[1..end]);
-                rest = &rest[end..];
-            }
-            '#' => {
-                let end = rest[1..]
-                    .find(['.', '#', '[', ':', ' ', '>', '+', '~'].as_slice())
-                    .map(|i| i + 1)
-                    .unwrap_or(rest.len());
-                required_id = Some(&rest[1..end]);
-                rest = &rest[end..];
-            }
-            _ => break,
-        }
-    }
-
-    let class_attr = element
-        .attrs
-        .iter()
-        .find(|a| a.name.local.as_ref() == "class")
-        .map(|a| a.value.to_string())
-        .unwrap_or_default();
-    let classes: Vec<_> = class_attr.split_whitespace().collect();
-    for cls in required_classes {
-        if !classes.contains(&cls) {
-            return false;
-        }
-    }
-
-    if let Some(id) = required_id {
-        let element_id = element
-            .attrs
-            .iter()
-            .find(|a| a.name.local.as_ref() == "id")
-            .map(|a| a.value.as_ref());
-        if element_id != Some(id) {
-            return false;
-        }
-    }
-
-    true
 }
 
 fn make_code_fence(content: &str, min_len: usize) -> String {

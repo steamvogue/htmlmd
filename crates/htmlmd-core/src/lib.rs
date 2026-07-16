@@ -45,14 +45,8 @@ pub fn convert_with_backend<B: ConverterBackend + ?Sized>(
 ) -> Result<ConversionResult> {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-    if options.limits.max_input_bytes > 0 && html.len() as u64 > options.limits.max_input_bytes {
-        return Err(Error::LimitExceeded(format!(
-            "input size {} exceeds {}",
-            html.len(),
-            options.limits.max_input_bytes
-        )));
-    }
-
+    // All input limits (including max_input_bytes) are enforced in one place:
+    // `cleanup::check_limits`, which errors in strict mode and warns otherwise.
     let (cleaned_html, metadata) = clean_html(html, options, None, &mut diagnostics)?;
 
     let mut result = backend.convert(&cleaned_html, options)?;
@@ -130,13 +124,13 @@ fn apply_profile_post_processing(result: &mut ConversionResult, options: &Conver
 fn build_obsidian_frontmatter(result: &ConversionResult) -> Option<String> {
     let mut lines = Vec::new();
     if let Some(title) = &result.title {
-        lines.push(format!("title: {title}"));
+        lines.push(format!("title: {}", yaml_quote(title)));
     }
     if let Some(description) = &result.description {
-        lines.push(format!("description: {description}"));
+        lines.push(format!("description: {}", yaml_quote(description)));
     }
     if let Some(url) = &result.canonical_url {
-        lines.push(format!("canonical_url: {url}"));
+        lines.push(format!("canonical_url: {}", yaml_quote(url)));
     }
     if lines.is_empty() {
         return None;
@@ -144,51 +138,141 @@ fn build_obsidian_frontmatter(result: &ConversionResult) -> Option<String> {
     Some(format!("---\n{}\n---", lines.join("\n")))
 }
 
+/// Quote a string as a double-quoted YAML scalar so metadata containing
+/// `:`, `#`, quotes, or newlines cannot break the frontmatter.
+fn yaml_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 fn escape_mdx(text: &str) -> String {
-    // Escape curly braces, which MDX interprets as JSX expressions.
-    text.replace('{', "\\{").replace('}', "\\}")
+    // Escape curly braces (JSX expressions) and `<` where it could open a
+    // JSX element or fragment. A bare `<` followed by whitespace or a digit
+    // is left alone — MDX treats it as text.
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => out.push_str("\\{"),
+            '}' => out.push_str("\\}"),
+            '<' => {
+                if matches!(chars.peek(), Some(n) if n.is_ascii_alphabetic() || *n == '/' || *n == '>')
+                {
+                    out.push_str("\\<");
+                } else {
+                    out.push('<');
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 fn strip_markdown(text: &str) -> String {
     use once_cell::sync::Lazy;
     use regex::Regex;
 
+    // htmd escapes literal Markdown metacharacters in prose (`snake\_case`,
+    // `a\*b`). Encode each backslash-escaped character into the Unicode
+    // private-use area so the structural-marker stripping below cannot see
+    // it, then map it back to the bare character at the end.
+    const PUA_BASE: u32 = 0xE100;
+    fn protect(c: char) -> char {
+        char::from_u32(PUA_BASE + c as u32).unwrap_or(c)
+    }
+    fn unprotect(c: char) -> char {
+        let cp = c as u32;
+        if (PUA_BASE..PUA_BASE + 0x80).contains(&cp) {
+            char::from_u32(cp - PUA_BASE).unwrap_or(c)
+        } else {
+            c
+        }
+    }
+
     static HEADINGS: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^#{1,6}\s+").unwrap());
     static BLOCKQUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^>\s?").unwrap());
     static BULLETS: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^[-*+]\s+").unwrap());
     static ORDERED: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\d+\.\s+").unwrap());
-    static FENCED_BACKTICK: Lazy<Regex> = Lazy::new(|| Regex::new(r"```[\s\S]*?```").unwrap());
-    static FENCED_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"~~~[\s\S]*?~~~").unwrap());
+    // Fenced blocks: drop the fence lines, keep the code itself readable.
+    static FENCED_BACKTICK: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"```[^\n]*\n?([\s\S]*?)```").unwrap());
+    static FENCED_TILDE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"~~~[^\n]*\n?([\s\S]*?)~~~").unwrap());
     static INLINE_CODE: Lazy<Regex> = Lazy::new(|| Regex::new(r"`([^`]+)`").unwrap());
     static IMAGES: Lazy<Regex> = Lazy::new(|| Regex::new(r"!\[([^\]]*)\]\([^)]*\)").unwrap());
     static LINKS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[([^\]]+)\]\([^)]*\)").unwrap());
+    // Emphasis-family markers are stripped only in *pairs*, so unpaired
+    // characters in prose or code (`x^2`, `C++`, `b * c`) survive.
+    static BOLD_STARS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+    static BOLD_UNDERS: Lazy<Regex> = Lazy::new(|| Regex::new(r"__([^_]+)__").unwrap());
+    static EM_STAR: Lazy<Regex> = Lazy::new(|| Regex::new(r"\*([^*\n]+)\*").unwrap());
+    static EM_UNDER: Lazy<Regex> = Lazy::new(|| Regex::new(r"_([^_\n]+)_").unwrap());
+    static STRIKE: Lazy<Regex> = Lazy::new(|| Regex::new(r"~~([^~]+)~~").unwrap());
+    static HIGHLIGHT: Lazy<Regex> = Lazy::new(|| Regex::new(r"==([^=\n]+)==").unwrap());
+    static INSERT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\+\+([^+\n]+)\+\+").unwrap());
+    static SUPERSCRIPT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\^([^^\s]+)\^").unwrap());
+    static SUBSCRIPT: Lazy<Regex> = Lazy::new(|| Regex::new(r"~([^~\s]+)~").unwrap());
     static HRULES: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^---+\s*$").unwrap());
     static BLANK_LINES: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
 
-    let mut s = text.to_string();
+    // 1. Protect backslash escapes.
+    let mut s = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(&next) = chars.peek() {
+                if next.is_ascii_punctuation() {
+                    s.push(protect(next));
+                    chars.next();
+                    continue;
+                }
+            }
+        }
+        s.push(c);
+    }
 
-    // Headings: remove ATX markers.
+    // 2. Code: unwrap fenced blocks and inline code, keeping content.
+    s = FENCED_BACKTICK.replace_all(&s, "$1").to_string();
+    s = FENCED_TILDE.replace_all(&s, "$1").to_string();
+    s = INLINE_CODE.replace_all(&s, "$1").to_string();
+
+    // 3. Images -> alt text, links -> link text.
+    s = IMAGES.replace_all(&s, "$1").to_string();
+    s = LINKS.replace_all(&s, "$1").to_string();
+
+    // 4. Paired inline markers (longest first).
+    s = BOLD_STARS.replace_all(&s, "$1").to_string();
+    s = BOLD_UNDERS.replace_all(&s, "$1").to_string();
+    s = EM_STAR.replace_all(&s, "$1").to_string();
+    s = EM_UNDER.replace_all(&s, "$1").to_string();
+    s = STRIKE.replace_all(&s, "$1").to_string();
+    s = HIGHLIGHT.replace_all(&s, "$1").to_string();
+    s = INSERT.replace_all(&s, "$1").to_string();
+    s = SUPERSCRIPT.replace_all(&s, "$1").to_string();
+    s = SUBSCRIPT.replace_all(&s, "$1").to_string();
+
+    // 5. Block markers.
     s = HEADINGS.replace_all(&s, "").to_string();
-    // Blockquote markers.
     s = BLOCKQUOTES.replace_all(&s, "").to_string();
-    // List bullets / ordered markers.
     s = BULLETS.replace_all(&s, "").to_string();
     s = ORDERED.replace_all(&s, "").to_string();
-    // Fenced code blocks.
-    s = FENCED_BACKTICK.replace_all(&s, "").to_string();
-    s = FENCED_TILDE.replace_all(&s, "").to_string();
-    // Inline code.
-    s = INLINE_CODE.replace_all(&s, "$1").to_string();
-    // Images -> alt text.
-    s = IMAGES.replace_all(&s, "$1").to_string();
-    // Links -> link text.
-    s = LINKS.replace_all(&s, "$1").to_string();
-    // Emphasis / highlight / insert / strike / sub / sup markers.
-    for marker in ["**", "__", "*", "_", "~~", "==", "++", "^", "~"] {
-        s = s.replace(marker, "");
-    }
-    // Horizontal rules.
     s = HRULES.replace_all(&s, "").to_string();
+
+    // 6. Restore protected literals (dropping the escape backslash).
+    s = s.chars().map(unprotect).collect();
 
     // Collapse multiple blank lines.
     BLANK_LINES.replace_all(s.trim(), "\n\n").to_string()
@@ -210,6 +294,50 @@ mod tests {
         let md = convert(html, &ConversionOptions::gfm()).unwrap();
         assert!(md.markdown.contains("| A | B |"));
         assert!(md.markdown.contains("| 1 | 2 |"));
+    }
+
+    #[test]
+    fn plain_text_keeps_literal_metacharacters() {
+        let html = "<p>snake_case a*b x^2 C++ 2_10</p>";
+        let md = convert(html, &ConversionOptions::plain_text()).unwrap();
+        assert_eq!(md.markdown.trim(), "snake_case a*b x^2 C++ 2_10");
+    }
+
+    #[test]
+    fn plain_text_keeps_code_content() {
+        let html = "<pre><code>let a = b * c;</code></pre><p>uses <code>x_y</code></p>";
+        let md = convert(html, &ConversionOptions::plain_text()).unwrap();
+        assert!(md.markdown.contains("let a = b * c;"), "{}", md.markdown);
+        assert!(md.markdown.contains("uses x_y"), "{}", md.markdown);
+    }
+
+    #[test]
+    fn plain_text_strips_paired_markers() {
+        let html = "<p><strong>bold</strong> and <em>em</em> and <mark>hi</mark></p>";
+        let md = convert(html, &ConversionOptions::plain_text()).unwrap();
+        assert_eq!(md.markdown.trim(), "bold and em and hi");
+    }
+
+    #[test]
+    fn obsidian_frontmatter_is_yaml_safe() {
+        let html = "<html><head><title>Rust: a story #1</title></head>\
+                    <body><p>hi</p></body></html>";
+        let mut options = ConversionOptions::obsidian();
+        options.cleanup.metadata.title = true;
+        let md = convert(html, &options).unwrap();
+        assert!(
+            md.markdown
+                .starts_with("---\ntitle: \"Rust: a story #1\"\n---"),
+            "{}",
+            md.markdown
+        );
+    }
+
+    #[test]
+    fn mdx_escapes_jsx_openers() {
+        let html = "<p>use x = 1 and a &lt; b</p>";
+        let md = convert(html, &ConversionOptions::mdx_safe()).unwrap();
+        assert!(md.markdown.contains("a < b"), "{}", md.markdown);
     }
 
     #[test]

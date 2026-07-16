@@ -75,6 +75,17 @@ fn run() -> Result<()> {
                         }
                     }
                 }
+                // -v surfaces per-file conversion diagnostics on stderr.
+                if cli.verbose > 0 && !cli.quiet {
+                    let name = job
+                        .input_path
+                        .as_ref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "<stdin>".to_string());
+                    for diag in &record.result.diagnostics {
+                        eprintln!("htmlmd: [{name}] {diag}");
+                    }
+                }
                 Ok(record)
             })
             .collect()

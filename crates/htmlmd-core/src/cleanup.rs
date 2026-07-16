@@ -11,7 +11,7 @@ use crate::options::{
     DifficultTableStrategy, FormHandling, HiddenContentPolicy, ImageMode, MediaPolicy,
     TableHandling, TitleHandling,
 };
-use crate::rewrite::{CompiledRewriteRules, rewrite_url_attr};
+use crate::rewrite::{CompiledRewriteRules, choose_largest_srcset, rewrite_url_attr};
 use once_cell::sync::Lazy;
 
 // Selectors used inside per-table / per-row loops; parsed once per process.
@@ -42,6 +42,7 @@ pub fn clean_html(
     apply_remove_tags(&mut document, options);
     apply_footnote_cleanup(&mut document, options);
     apply_per_tag_behavior(&mut document, options);
+    apply_heading_offset(&mut document, options);
     apply_remove_selectors(&mut document, options, path, diagnostics)?;
     apply_unwrap_selectors(&mut document, options, path, diagnostics)?;
     apply_keep_only(&mut document, options, path, diagnostics)?;
@@ -53,6 +54,7 @@ pub fn clean_html(
     apply_media_policy(&mut document, options);
     apply_code_language_detection(&mut document, options);
     apply_image_handling(&mut document, options);
+    apply_custom_rule_markers(&mut document, options, path, diagnostics)?;
     apply_url_rewriting(&mut document, options, diagnostics)?;
 
     if options.render.title_attribute == TitleHandling::Ignore {
@@ -583,26 +585,6 @@ fn promote_srcset(document: &mut Html, id: NodeId, options: &ConversionOptions) 
     }
 }
 
-fn choose_largest_srcset<'a>(candidates: &'a [&'a str]) -> &'a str {
-    candidates
-        .iter()
-        .max_by_key(|c| {
-            c.split_whitespace()
-                .nth(1)
-                .and_then(|d| {
-                    if let Some(n) = d.strip_suffix('w') {
-                        n.parse::<u32>().ok()
-                    } else {
-                        d.strip_suffix('x')
-                            .map(|n| (n.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32)
-                    }
-                })
-                .unwrap_or(0)
-        })
-        .copied()
-        .unwrap_or(candidates[0])
-}
-
 fn append_image_metadata(document: &mut Html, id: NodeId) {
     let (width, height) = {
         let Some(node) = document.tree.get(id) else {
@@ -896,6 +878,43 @@ fn apply_per_tag_behavior(document: &mut Html, options: &ConversionOptions) {
     }
 }
 
+static SEL_HEADINGS: Lazy<Selector> = Lazy::new(|| Selector::parse("h1,h2,h3,h4,h5,h6").unwrap());
+
+/// Shift heading levels by `semantic.heading_offset`, clamping the result to
+/// the valid `h1`..`h6` range.
+fn apply_heading_offset(document: &mut Html, options: &ConversionOptions) {
+    let offset = i32::from(options.semantic.heading_offset);
+    if offset == 0 {
+        return;
+    }
+
+    let targets: Vec<(NodeId, i32)> = document
+        .select(&SEL_HEADINGS)
+        .filter_map(|e| {
+            let level = e.value().name().strip_prefix('h')?.parse::<i32>().ok()?;
+            Some((e.id(), level))
+        })
+        .collect();
+
+    for (id, level) in targets {
+        let new_level = (level + offset).clamp(1, 6);
+        if new_level == level {
+            continue;
+        }
+        let Some(mut node) = document.tree.get_mut(id) else {
+            continue;
+        };
+        let Node::Element(ref mut el) = *node.value() else {
+            continue;
+        };
+        el.name = QualName::new(
+            None,
+            el.name.ns.clone(),
+            LocalName::from(format!("h{new_level}").as_str()),
+        );
+    }
+}
+
 // --- Phase 3: custom rules, mermaid, tables, language detection ---
 
 fn apply_custom_rules(
@@ -948,15 +967,97 @@ fn apply_custom_rules(
                     | CustomRuleAction::FencedBlock
                     | CustomRuleAction::Link
                     | CustomRuleAction::Image => {
-                        // These actions produce raw Markdown syntax and are handled
-                        // by the backend's element handlers so the output is not
-                        // escaped by the Markdown text formatter.
+                        // These actions produce raw Markdown syntax. Matched
+                        // elements are tagged later by
+                        // `apply_custom_rule_markers` (after attribute
+                        // normalization) and rendered by the backend handler,
+                        // so the output is not escaped by the Markdown text
+                        // formatter.
                     }
                 }
             }
         }
     }
 
+    Ok(())
+}
+
+/// Tag elements matched by Markdown-producing custom rules (template, fenced
+/// block, link, image) with the `htmlmdrule` marker tag and the rule's index,
+/// which the backend's single custom-rule handler resolves. This gives those
+/// actions full CSS-selector support and one priority order (descending,
+/// declaration order as tiebreak — the first matching rule claims the
+/// element). Runs late in the pipeline so earlier passes (lazy-image
+/// promotion, language detection) have already normalized attributes.
+fn apply_custom_rule_markers(
+    document: &mut Html,
+    options: &ConversionOptions,
+    path: Option<&str>,
+    diagnostics: &mut dyn DiagnosticsCollector,
+) -> Result<()> {
+    let mut rules: Vec<_> = options
+        .extension
+        .custom_rules
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| {
+            matches!(
+                r.action,
+                CustomRuleAction::MarkdownTemplate
+                    | CustomRuleAction::FencedBlock
+                    | CustomRuleAction::Link
+                    | CustomRuleAction::Image
+            )
+        })
+        .collect();
+    if rules.is_empty() {
+        return Ok(());
+    }
+    rules.sort_by(|a, b| b.1.priority.cmp(&a.1.priority).then_with(|| a.0.cmp(&b.0)));
+
+    for (index, rule) in rules {
+        for selector_str in &rule.selectors {
+            let selector = match Selector::parse(selector_str) {
+                Ok(s) => s,
+                Err(e) => {
+                    let mut d = Diagnostic::warning(format!(
+                        "invalid custom rule selector {selector_str}: {e}"
+                    ))
+                    .with_rule(index.to_string());
+                    if let Some(p) = path {
+                        d = d.with_path(p);
+                    }
+                    diagnostics.push(d);
+                    if options.strict {
+                        return Err(Error::Selector(format!(
+                            "invalid custom rule selector {selector_str}: {e}"
+                        )));
+                    }
+                    continue;
+                }
+            };
+
+            let ids: Vec<NodeId> = document.select(&selector).map(|e| e.id()).collect();
+            for id in ids {
+                let Some(mut node) = document.tree.get_mut(id) else {
+                    continue;
+                };
+                let Node::Element(ref mut el) = *node.value() else {
+                    continue;
+                };
+                // First (highest-priority) matching rule claims the element.
+                if el
+                    .attrs
+                    .iter()
+                    .any(|(n, _)| n.local.as_ref() == "data-htmlmd-rule")
+                {
+                    continue;
+                }
+                set_attr(el, "data-htmlmd-rule", &index.to_string());
+                el.name = QualName::new(None, el.name.ns.clone(), LocalName::from("htmlmdrule"));
+            }
+        }
+    }
     Ok(())
 }
 

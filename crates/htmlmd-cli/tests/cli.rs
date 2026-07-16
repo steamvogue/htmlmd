@@ -338,8 +338,8 @@ fn profile_obsidian_frontmatter_and_wikilink() {
     cmd.assert()
         .success()
         .stdout(contains("---"))
-        .stdout(contains("title: My Note"))
-        .stdout(contains("description: A note"))
+        .stdout(contains("title: \"My Note\""))
+        .stdout(contains("description: \"A note"))
         .stdout(contains("[[Another page|another note]]"));
 }
 
@@ -484,7 +484,7 @@ fn metadata_canonical_url_flag() {
     .arg(fixture_dir().join("metadata.html"));
     cmd.assert()
         .success()
-        .stdout(contains("title: Page Title"))
-        .stdout(contains("description: Page description"))
-        .stdout(contains("canonical_url: https://example.com/page"));
+        .stdout(contains("title: \"Page Title\""))
+        .stdout(contains("description: \"Page description\""))
+        .stdout(contains("canonical_url: \"https://example.com/page\""));
 }

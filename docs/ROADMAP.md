@@ -65,7 +65,16 @@ Acceptance: `cargo bench` produces a wrapper-overhead-vs-htmd ratio.
 
 Acceptance: benchmark deltas recorded in `BENCHMARKS.md`; no fixture changes.
 
-## M2 — Correctness, robustness, honest options (2–3 days)
+## M2 — Correctness, robustness, honest options — ✅ done 2026-07-16
+
+All ten items landed. Notes: the plain-text rework protects htmd's
+backslash-escapes via a private-use-area encoding and strips only *paired*
+markers; custom rules are unified by renaming claimed elements to an
+`htmlmdrule` marker tag in the DOM pass (full CSS selectors everywhere, one
+descending priority order); 20 inert option fields and 14 orphaned enums were
+deleted while `task-lists` (previously advertised but entirely unimplemented)
+and `heading-offset` were wired for real; the server gained bind/body-limit
+config, graceful shutdown, and its first tests.
 
 1. **Plain-text profile rework.** `strip_markdown` (`lib.rs:150–180`) deletes
    `*`, `_`, `~`, `^`, `==`, `++` from legitimate prose and code. Replace

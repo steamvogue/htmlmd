@@ -1,11 +1,10 @@
 # htmlmd option reference
 
-This document lists the configuration options accepted by `htmlmd-core` and the CLI. The schema is stable; the effect column indicates what is implemented and tested through **Phase 3**.
+This document lists the configuration options accepted by `htmlmd-core` and the CLI. Every option in the schema is functional; formerly reserved, accepted-but-inert options were removed pre-1.0 (see [Removed options](#removed-options)).
 
 Legend:
 - ✅ Implemented and tested
 - ⚠️ Parsed/accepted but behavior is limited or fallback
-- ❌ Reserved for a later phase
 
 ## Top-level
 
@@ -20,31 +19,17 @@ Legend:
 |---------------------------|--------|---------------|--------|----------------------------------------------|
 | `heading-style`           | enum   | `atx`         | ✅     | `atx`, `setex`, `keep` maps to `atx`         |
 | `bullet`                  | enum   | `hyphen`      | ✅     | `hyphen`/`plus` map to dash; `asterisk` works|
-| `ordered-list-marker`     | enum   | `decimal`     | ⚠️     | Schema only; `htmd` always uses decimals     |
-| `emphasis-marker`         | enum   | `asterisk`    | ⚠️     | Schema only                                  |
-| `strong-marker`           | enum   | `asterisk`    | ⚠️     | Schema only                                  |
 | `code-fence`              | enum   | `backticks`   | ✅     | `backticks` or `tildes`                      |
-| `code-fence-min-length`   | u8     | `3`           | ⚠️     | Schema only                                  |
-| `line-wrapping`           | enum   | `off`         | ❌     | Reserved                                     |
 | `hard-break-style`        | enum   | `two-spaces`  | ✅     | `two-spaces` or `backslash`                  |
 | `hr-style`                | enum   | `dashes`      | ✅     | `dashes`, `asterisks`, `underscores`         |
-| `escaping-mode`           | enum   | `minimal`     | ⚠️     | Schema only; `htmd` escaping is used         |
-| `character-entities`      | enum   | `decode`      | ⚠️     | Schema only                                  |
 | `unicode-normalization`   | enum   | `off`         | ✅     | `off`, `nfc`, `nfkc` post-processing         |
-| `smart-punctuation`       | enum   | `preserve`    | ⚠️     | Schema only                                  |
 | `trailing-whitespace`     | enum   | `trim`        | ✅     | `trim` or `preserve`                         |
 | `final-newline`           | enum   | `ensure`      | ✅     | `ensure`, `preserve`, `suppress`             |
-| `blank-line-compaction`   | u8     | `1`           | ⚠️     | Schema only                                  |
 | `link-style`              | enum   | `inline`      | ✅     | `inline`, `reference`, `collapsed-reference`, `shortcut-reference` |
 | `reference-placement`     | enum   | `end`         | ✅     | `end`, `adjacent`, `section-end`             |
 | `image-mode`              | enum   | `inline`      | ✅     | `inline`, `skip`, `alt-text`, `reference`    |
 | `title-attribute`         | enum   | `ignore`      | ⚠️     | `ignore` strips titles; `inline`/`reference` not wired |
-| `url-escaping`            | enum   | `auto`        | ⚠️     | Schema only                                  |
-| `autolink-detection`      | bool   | `true`        | ⚠️     | Schema only                                  |
-| `email-handling`          | enum   | `mailto`      | ⚠️     | Schema only                                  |
 | `raw-html-policy`         | enum   | `drop`        | ✅     | `faithful` enables `htmd` faithful mode      |
-| `comment-policy`          | enum   | `drop`        | ⚠️     | Schema only                                  |
-| `doctype-policy`          | enum   | `drop`        | ⚠️     | Schema only                                  |
 
 ## `[cleanup]` – HTML cleanup and content selection
 
@@ -78,28 +63,22 @@ Legend:
 
 | Option                    | Type     | Default                          | Status | Notes |
 |---------------------------|----------|----------------------------------|--------|-------|
-| `heading-offset`          | i8       | `0`                              | ⚠️     | Schema only |
-| `normalize-headings`      | bool     | `false`                          | ⚠️     | Schema only |
-| `list-indent`             | u8       | `4`                              | ⚠️     | Schema only |
-| `task-lists`              | bool     | `true`                           | ⚠️     | Schema only; `htmd` handles some checkboxes |
+| `heading-offset`          | i8       | `0`                              | ✅     | Shift heading levels by a signed amount; result clamped to `h1`..`h6` |
+| `task-lists`              | bool     | `true`                           | ✅     | `<input type="checkbox">` list items become `[ ]`/`[x]` task markers |
 | `table-handling`          | enum     | `gfm`                            | ✅     | `gfm`, `html-fallback`, `csv-like`, `flatten`, `drop` |
 | `difficult-table-strategy`| enum     | `html-fallback`                  | ⚠️     | `html-fallback`/`flatten` wired; `span-cells` reserved |
 | `code-language-patterns`  | [string] | `language-*`, `lang-*`, …        | ✅     | Class/language extraction |
 | `detect-languages`        | bool     | `true`                           | ✅     | Heuristic language detection for bare code blocks |
-| `inline-style-subset`     | enum     | `basic`                          | ⚠️     | Schema only |
-| `semantic-tags`           | enum     | `convert`                        | ⚠️     | Schema only |
 | `definition-lists`        | bool     | `false`                          | ✅     | Pandoc-style definition lists |
 | `footnotes`               | bool     | `false`                          | ✅     | `[^n]` refs and `[^n]: ...` defs |
 | `math`                    | object   | `enabled: false`                 | ✅     | `inline-dollar`, `block-dollar`, `fenced`, `plain`, `preserve-html` |
 | `mermaid`                 | enum     | `fenced`                         | ✅     | `fenced`, `preserve-html`, `drop` |
-| `embedded-media`          | enum     | `preserve-link`                  | ❌     | Reserved |
 
 ## `[extension]` – Extensibility
 
 | Option        | Type     | Default | Status | Notes |
 |---------------|----------|---------|--------|-------|
 | `custom-rules`| [object] | `[]`    | ✅     | Per-selector actions; see README examples |
-| `rule-packs`  | [string] | `[]`    | ❌     | Reserved |
 
 ## `[limits]` – Safety and size limits
 
@@ -165,3 +144,23 @@ The effective configuration is built in this order (later overrides earlier):
 6. CLI flags
 
 All options are validated before any file is processed.
+
+## Removed options
+
+The following options were accepted and documented in earlier pre-1.0
+releases but never affected output. They were removed from the schema rather
+than left silently ignored. Configuration files that still contain these keys
+load without error — unknown keys are ignored by the loader — but the keys
+have no effect.
+
+- `[render]`: `ordered-list-marker`, `emphasis-marker`, `strong-marker`,
+  `code-fence-min-length`, `line-wrapping`, `escaping-mode`,
+  `character-entities`, `smart-punctuation`, `blank-line-compaction`,
+  `url-escaping`, `autolink-detection`, `email-handling`, `comment-policy`,
+  `doctype-policy`
+- `[semantic]`: `normalize-headings`, `list-indent`, `inline-style-subset`,
+  `semantic-tags`, `embedded-media`
+- `[extension]`: `rule-packs`
+
+Two formerly inert options were wired instead of removed: `heading-offset`
+and `task-lists` (see the `[semantic]` table above).

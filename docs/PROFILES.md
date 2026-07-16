@@ -9,7 +9,7 @@
 | `commonmark` | Standard CommonMark output. | Generic Markdown, maximum portability. |
 | `gfm` | GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks). | GitHub/GitLab repos, GFM renderers. |
 | `extended` | Footnotes, definition lists, math, GitHub alerts, mermaid, semantic tags. | Static sites, note-taking tools. |
-| `pandoc` | Like `extended`, but raw HTML is preserved and smart punctuation is normalized. | Pandoc workflows. |
+| `pandoc` | Like `extended`, but raw HTML is preserved. | Pandoc workflows. |
 | `obsidian` | `extended` features plus YAML frontmatter and Obsidian-style `[[wikilinks]]`. | Obsidian vaults. |
 | `mdx-safe` | `extended` features with raw HTML dropped/escaped and JSX braces escaped. | MDX/Next.js/Docusaurus. |
 | `plain-text` | Readable plain text with Markdown markup stripped and images replaced by alt text. | Search indexes, summaries. |
@@ -130,7 +130,7 @@ Inline math:$E=mc^2$.
 
 ### Pandoc
 
-Pandoc mode preserves raw HTML so you can post-process with Pandoc, and enables smart-punctuation normalization.
+Pandoc mode preserves raw HTML so you can post-process with Pandoc.
 
 ```bash
 htmlmd --profile pandoc fixtures/extended.html

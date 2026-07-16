@@ -804,10 +804,12 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "htmlmd-core",
+ "http-body-util",
  "mimalloc",
  "serde",
  "serde_json",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]

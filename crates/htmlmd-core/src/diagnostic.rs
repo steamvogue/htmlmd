@@ -58,6 +58,22 @@ impl Diagnostic {
     }
 }
 
+impl std::fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            DiagnosticKind::Warning => write!(f, "warning: {}", self.message)?,
+            DiagnosticKind::Error => write!(f, "error: {}", self.message)?,
+        }
+        if let Some(selector) = &self.selector {
+            write!(f, " (selector: {selector})")?;
+        }
+        if let Some(rule) = &self.rule {
+            write!(f, " (rule: {rule})")?;
+        }
+        Ok(())
+    }
+}
+
 /// Trait for collecting diagnostics.
 pub trait DiagnosticsCollector: Send + Sync {
     fn push(&mut self, diagnostic: Diagnostic);

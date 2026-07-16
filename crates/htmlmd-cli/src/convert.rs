@@ -42,39 +42,18 @@ pub fn read_jobs(cli: &Cli) -> Result<Vec<Job>> {
         }]);
     }
 
-    // Reject -o with multiple inputs unless --output-dir is used.
-    if cli.output.is_some() && cli.output_dir.is_none() && total_input_count(&cli.inputs)? > 1 {
-        return Err(CliError::OutputRequired);
-    }
-
     let mut jobs = Vec::new();
     for input in &cli.inputs {
         resolve_input(input, cli, &mut jobs)?;
     }
-    Ok(jobs)
-}
 
-fn total_input_count(inputs: &[String]) -> Result<usize> {
-    let mut count = 0;
-    for input in inputs {
-        if is_glob(input) {
-            for entry in glob::glob(input)? {
-                let path = entry?;
-                if path.is_file() {
-                    count += 1;
-                }
-            }
-        } else {
-            let path = PathBuf::from(input);
-            if path.is_dir() {
-                // approximate: will be validated later
-                count += 1;
-            } else {
-                count += 1;
-            }
-        }
+    // Reject -o with multiple inputs unless --output-dir is used. This counts
+    // resolved jobs rather than raw arguments, so a directory or glob that
+    // expands to many files is guarded correctly too.
+    if cli.output.is_some() && cli.output_dir.is_none() && jobs.len() > 1 {
+        return Err(CliError::OutputRequired);
     }
-    Ok(count)
+    Ok(jobs)
 }
 
 fn resolve_input(input: &str, cli: &Cli, jobs: &mut Vec<Job>) -> Result<()> {

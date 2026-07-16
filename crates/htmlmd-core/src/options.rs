@@ -6,12 +6,10 @@
 //! `serde`, so the same structure can be populated from Rust, JSON, TOML, or
 //! environment variables (via the CLI's configuration loader).
 //!
-//! # Phase 1 scope note
-//!
-//! The schema intentionally reserves fields for Phase 2+ features (e.g. math,
-//! definition lists, custom rules) so the public API stays stable. Options that
-//! are wired to the Phase 1 backend are marked in their doc comments; the rest
-//! are accepted, parsed, and documented, but do not yet affect output.
+//! Every option in this schema is functional: each field is read by the
+//! conversion pipeline and affects output. Previously reserved,
+//! accepted-but-inert fields were removed pre-1.0; unknown keys in existing
+//! configuration files are ignored by the loader, so old configs still load.
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -65,45 +63,6 @@ pub enum BulletMarker {
     Plus,
 }
 
-/// Ordered list numbering strategy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum OrderedListMarker {
-    /// `1. 2. 3.`
-    #[default]
-    Decimal,
-    /// `01.`
-    ZeroPadded,
-    /// Roman numerals.
-    Roman,
-    /// `a.`/`A.`
-    Alpha,
-    /// `1)`
-    OneDot,
-}
-
-/// Inline emphasis marker.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EmphasisMarker {
-    /// `*emphasis*`
-    #[default]
-    Asterisk,
-    /// `_emphasis_`
-    Underscore,
-}
-
-/// Strong emphasis marker.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum StrongMarker {
-    /// `**strong**`
-    #[default]
-    Asterisk,
-    /// `__strong__`
-    Underscore,
-}
-
 /// Code fence delimiter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -113,19 +72,6 @@ pub enum CodeFence {
     Backticks,
     /// `~~~code~~~`
     Tildes,
-}
-
-/// Line wrapping policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum LineWrapping {
-    /// No wrapping.
-    #[default]
-    Off,
-    /// Hard wrap at a fixed column.
-    Fixed(u32),
-    /// Wrap at word boundaries near the column.
-    Semantic(u32),
 }
 
 /// Hard line break representation.
@@ -152,30 +98,6 @@ pub enum HrStyle {
     Underscores,
 }
 
-/// Markdown escaping mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EscapingMode {
-    /// Escape only when required by the target profile.
-    #[default]
-    Minimal,
-    /// Escape common ambiguous characters.
-    Conservative,
-    /// Escape aggressively for maximum safety.
-    Strict,
-}
-
-/// HTML character entity policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EntityPolicy {
-    /// Decode entities to Unicode.
-    #[default]
-    Decode,
-    /// Preserve the original entity references.
-    Preserve,
-}
-
 /// Unicode normalization policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -187,19 +109,6 @@ pub enum UnicodeNormalization {
     Nfc,
     /// NFKC.
     Nfkc,
-}
-
-/// Smart punctuation handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum SmartPunctuation {
-    /// Keep as-is.
-    #[default]
-    Preserve,
-    /// Normalize to curly quotes and em-dashes.
-    Normalize,
-    /// Convert to ASCII equivalents.
-    Ascii,
 }
 
 /// Trailing whitespace policy.
@@ -282,32 +191,6 @@ pub enum TitleHandling {
     Reference,
 }
 
-/// URL escaping / sanitization mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum UrlEscaping {
-    /// Escape only when necessary.
-    #[default]
-    Auto,
-    /// Never escape URLs.
-    Never,
-    /// Always percent-encode.
-    Always,
-}
-
-/// Email address handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EmailHandling {
-    /// Convert to `mailto:` links.
-    #[default]
-    Mailto,
-    /// Render as plain text.
-    Plain,
-    /// Obfuscate.
-    Obfuscate,
-}
-
 /// What to do with unsupported raw HTML.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -321,30 +204,6 @@ pub enum RawHtmlPolicy {
     Escape,
     /// Embed HTML faithfully when round-tripping matters.
     Faithful,
-}
-
-/// HTML comment handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum CommentPolicy {
-    /// Drop comments.
-    #[default]
-    Drop,
-    /// Preserve raw `<!-- -->`.
-    Preserve,
-    /// Convert to Markdown comments (`<!-- -->` is the same in Markdown).
-    Markdown,
-}
-
-/// DOCTYPE / XML processing instruction handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum DoctypePolicy {
-    /// Drop declarations.
-    #[default]
-    Drop,
-    /// Preserve them.
-    Preserve,
 }
 
 /// Hidden content policy.
@@ -455,32 +314,6 @@ pub enum DifficultTableStrategy {
     Flatten,
 }
 
-/// CSS-aware inline style conversion subset.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum InlineStyleSubset {
-    /// Do not consider inline styles.
-    #[default]
-    Off,
-    /// Convert a documented safe subset.
-    Basic,
-    /// Convert all recognized styles.
-    All,
-}
-
-/// Semantic tag handling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum SemanticTagPolicy {
-    /// Convert to Markdown equivalents.
-    #[default]
-    Convert,
-    /// Preserve as raw HTML.
-    PreserveHtml,
-    /// Drop the element.
-    Drop,
-}
-
 /// Math output mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -509,19 +342,6 @@ pub enum MermaidPolicy {
     PreserveHtml,
     /// Drop.
     Drop,
-}
-
-/// Embedded social/media widgets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EmbeddedMediaPolicy {
-    /// Preserve the link if one exists.
-    #[default]
-    PreserveLink,
-    /// Drop the widget.
-    Drop,
-    /// Render a placeholder.
-    Placeholder,
 }
 
 /// Action for a custom tag rule.
@@ -613,33 +433,17 @@ pub struct CustomRule {
 pub struct RenderOptions {
     pub heading_style: HeadingStyle,
     pub bullet_marker: BulletMarker,
-    pub ordered_list_marker: OrderedListMarker,
-    pub emphasis_marker: EmphasisMarker,
-    pub strong_marker: StrongMarker,
     pub code_fence: CodeFence,
-    /// Minimum number of backticks/tildes in a code fence. Reserved for Phase 2+.
-    pub code_fence_min_length: u8,
-    pub line_wrapping: LineWrapping,
     pub hard_break_style: HardBreakStyle,
     pub hr_style: HrStyle,
-    pub escaping_mode: EscapingMode,
-    pub character_entities: EntityPolicy,
     pub unicode_normalization: UnicodeNormalization,
-    pub smart_punctuation: SmartPunctuation,
     pub trailing_whitespace: WhitespacePolicy,
     pub final_newline: FinalNewlinePolicy,
-    /// 0 = no compaction, 1 = collapse 2+ blank lines, 2 = collapse all extra blanks.
-    pub blank_line_compaction: u8,
     pub link_style: LinkStyle,
     pub reference_placement: ReferencePlacement,
     pub image_mode: ImageMode,
     pub title_attribute: TitleHandling,
-    pub url_escaping: UrlEscaping,
-    pub autolink_detection: bool,
-    pub email_handling: EmailHandling,
     pub raw_html_policy: RawHtmlPolicy,
-    pub comment_policy: CommentPolicy,
-    pub doctype_policy: DoctypePolicy,
 }
 
 impl Default for RenderOptions {
@@ -647,31 +451,17 @@ impl Default for RenderOptions {
         Self {
             heading_style: HeadingStyle::Atx,
             bullet_marker: BulletMarker::Hyphen,
-            ordered_list_marker: OrderedListMarker::Decimal,
-            emphasis_marker: EmphasisMarker::Asterisk,
-            strong_marker: StrongMarker::Asterisk,
             code_fence: CodeFence::Backticks,
-            code_fence_min_length: 3,
-            line_wrapping: LineWrapping::Off,
             hard_break_style: HardBreakStyle::TwoSpaces,
             hr_style: HrStyle::Dashes,
-            escaping_mode: EscapingMode::Minimal,
-            character_entities: EntityPolicy::Decode,
             unicode_normalization: UnicodeNormalization::Off,
-            smart_punctuation: SmartPunctuation::Preserve,
             trailing_whitespace: WhitespacePolicy::Trim,
             final_newline: FinalNewlinePolicy::Ensure,
-            blank_line_compaction: 1,
             link_style: LinkStyle::Inline,
             reference_placement: ReferencePlacement::End,
             image_mode: ImageMode::Inline,
             title_attribute: TitleHandling::Ignore,
-            url_escaping: UrlEscaping::Auto,
-            autolink_detection: true,
-            email_handling: EmailHandling::Mailto,
             raw_html_policy: RawHtmlPolicy::Drop,
-            comment_policy: CommentPolicy::Drop,
-            doctype_policy: DoctypePolicy::Drop,
         }
     }
 }
@@ -766,9 +556,9 @@ impl Default for CleanupOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct SemanticOptions {
+    /// Shift heading levels by this signed amount (result clamped to 1..=6).
     pub heading_offset: i8,
-    pub normalize_headings: bool,
-    pub list_indent: u8,
+    /// Convert `<input type="checkbox">` list items to GFM task-list markers.
     pub task_lists: bool,
     pub table_handling: TableHandling,
     pub difficult_table_strategy: DifficultTableStrategy,
@@ -776,21 +566,16 @@ pub struct SemanticOptions {
     /// Try to infer a code-block language from the source text when no
     /// `language-*` class is present.
     pub detect_languages: bool,
-    pub inline_style_subset: InlineStyleSubset,
-    pub semantic_tags: SemanticTagPolicy,
     pub definition_lists: bool,
     pub footnotes: bool,
     pub math: MathOptions,
     pub mermaid: MermaidPolicy,
-    pub embedded_media: EmbeddedMediaPolicy,
 }
 
 impl Default for SemanticOptions {
     fn default() -> Self {
         Self {
             heading_offset: 0,
-            normalize_headings: false,
-            list_indent: 4,
             task_lists: true,
             table_handling: TableHandling::Gfm,
             difficult_table_strategy: DifficultTableStrategy::HtmlFallback,
@@ -800,13 +585,10 @@ impl Default for SemanticOptions {
                 r"highlight-(?P<lang>\S+)".to_string(),
             ],
             detect_languages: true,
-            inline_style_subset: InlineStyleSubset::Basic,
-            semantic_tags: SemanticTagPolicy::Convert,
             definition_lists: false,
             footnotes: false,
             math: MathOptions::default(),
             mermaid: MermaidPolicy::Fenced,
-            embedded_media: EmbeddedMediaPolicy::PreserveLink,
         }
     }
 }
@@ -816,7 +598,6 @@ impl Default for SemanticOptions {
 #[serde(default, rename_all = "kebab-case")]
 pub struct ExtensionOptions {
     pub custom_rules: Vec<CustomRule>,
-    pub rule_packs: Vec<String>,
 }
 
 /// Central configuration structure.
@@ -848,6 +629,11 @@ impl Default for ConversionOptions {
 }
 
 impl ConversionOptions {
+    /// Create options for the CommonMark profile (the default profile).
+    pub fn commonmark() -> Self {
+        Self::default()
+    }
+
     /// Create options for the GFM profile.
     pub fn gfm() -> Self {
         Self {
@@ -884,7 +670,6 @@ impl ConversionOptions {
         let mut opts = Self::extended();
         opts.profile = OutputProfile::Pandoc;
         opts.render.raw_html_policy = RawHtmlPolicy::Faithful;
-        opts.render.smart_punctuation = SmartPunctuation::Normalize;
         opts
     }
 
@@ -901,8 +686,6 @@ impl ConversionOptions {
         let mut opts = Self::extended();
         opts.profile = OutputProfile::MdxSafe;
         opts.render.raw_html_policy = RawHtmlPolicy::Escape;
-        opts.render.comment_policy = CommentPolicy::Drop;
-        opts.render.escaping_mode = EscapingMode::Strict;
         opts
     }
 
@@ -956,13 +739,10 @@ impl ConversionOptions {
             _ => {}
         }
 
-        if self.profile == OutputProfile::Pandoc {
-            if self.render.raw_html_policy == render_defaults.raw_html_policy {
-                self.render.raw_html_policy = RawHtmlPolicy::Faithful;
-            }
-            if self.render.smart_punctuation == render_defaults.smart_punctuation {
-                self.render.smart_punctuation = SmartPunctuation::Normalize;
-            }
+        if self.profile == OutputProfile::Pandoc
+            && self.render.raw_html_policy == render_defaults.raw_html_policy
+        {
+            self.render.raw_html_policy = RawHtmlPolicy::Faithful;
         }
 
         if self.profile == OutputProfile::Obsidian
@@ -971,16 +751,10 @@ impl ConversionOptions {
             self.render.raw_html_policy = RawHtmlPolicy::Preserve;
         }
 
-        if self.profile == OutputProfile::MdxSafe {
-            if self.render.raw_html_policy == render_defaults.raw_html_policy {
-                self.render.raw_html_policy = RawHtmlPolicy::Escape;
-            }
-            if self.render.comment_policy == render_defaults.comment_policy {
-                self.render.comment_policy = CommentPolicy::Drop;
-            }
-            if self.render.escaping_mode == render_defaults.escaping_mode {
-                self.render.escaping_mode = EscapingMode::Strict;
-            }
+        if self.profile == OutputProfile::MdxSafe
+            && self.render.raw_html_policy == render_defaults.raw_html_policy
+        {
+            self.render.raw_html_policy = RawHtmlPolicy::Escape;
         }
 
         if self.profile == OutputProfile::PlainText {
