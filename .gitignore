@@ -36,4 +36,10 @@ Thumbs.db
 /benches/compare/package*.json
 /benches/compare/corpus/
 /benches/compare/results/
+/benches/compare/windows/tools/
+/benches/compare/windows/node_modules/
+/benches/compare/windows/package*.json
+/benches/compare/windows/corpus/
+/benches/compare/windows/results/
+/benches/compare/windows/*.exe
 __pycache__/

@@ -30,6 +30,9 @@ go install github.com/JohannesKaufmann/html-to-markdown/v2/cli/html2markdown@lat
 ./run.sh          # results/*.json + Markdown summary on stdout
 ```
 
+On Windows, use [`windows/`](windows/) instead — `setup.ps1` fetches the same
+pinned tool versions portably and `run.ps1` runs the same comparison.
+
 Fairness notes: every tool is asked for GFM-style output where it has a
 flag for it (htmlmd `--profile gfm`, turndown + gfm plugin, html2markdown
 `--plugin-table --plugin-strikethrough`, pandoc `-t gfm`, markdownify ATX
