@@ -134,6 +134,38 @@ strip target/release/htmlmd
 llvm-strip target/release/htmlmd.exe
 ```
 
+## Per-architecture output layout (`dist/`)
+
+Local release binaries live under `dist/<target-triple>/`, one directory per
+architecture, so builds for different machines never overwrite each other and
+never show up in `git status` (the whole `dist/` tree is gitignored):
+
+```text
+dist/
+├── aarch64-unknown-linux-gnu/
+│   ├── htmlmd
+│   ├── htmlmd-server
+│   └── SHA256SUMS
+└── x86_64-unknown-linux-gnu/
+    ├── htmlmd
+    ├── htmlmd-server
+    └── SHA256SUMS
+```
+
+`scripts/build-release.sh` builds, strips, copies, and checksums in one step:
+
+```bash
+# Host architecture
+scripts/build-release.sh
+
+# Explicit targets (must be installed via `rustup target add`)
+scripts/build-release.sh aarch64-unknown-linux-gnu x86_64-pc-windows-gnu
+```
+
+Always passing `--target <triple>` (the script does this even for the host)
+also keeps cargo's own artifacts separated under `target/<triple>/release/`,
+so a native build and a cross build never invalidate each other's caches.
+
 ## Deployment options
 
 ### Manual deployment

@@ -6,10 +6,10 @@ Teaches an agent how to use the `htmlmd` HTML-to-Markdown utility (CLI and HTTP 
 
 `htmlmd` converts HTML files, strings, or directories into Markdown. It supports multiple output profiles (CommonMark, GFM, Extended, Pandoc, Obsidian, MDX-safe, Plain text), a config file, batch conversion, and a small HTTP API server.
 
-In this repo the compiled binaries live in the `releases/` directory:
+In this repo the compiled binaries live under `dist/<target-triple>/` (on this machine: `dist/aarch64-unknown-linux-gnu/`):
 
-- `releases/htmlmd` — command-line tool
-- `releases/htmlmd-server` — HTTP API server
+- `dist/aarch64-unknown-linux-gnu/htmlmd` — command-line tool
+- `dist/aarch64-unknown-linux-gnu/htmlmd-server` — HTTP API server
 
 If they are missing, build them with:
 
@@ -18,7 +18,7 @@ cargo build -p htmlmd-cli --release
 cargo build -p htmlmd-server --release
 ```
 
-Then copy them to the `releases/` directory if you want to keep them after `cargo clean`.
+Or run `scripts/build-release.sh` to build, strip, and copy them into `dist/<target-triple>/` with checksums in one step (kept after `cargo clean`, gitignored).
 
 ## When to use
 
@@ -32,17 +32,17 @@ Then copy them to the `releases/` directory if you want to keep them after `carg
 
 ```bash
 # Convert to stdout
-releases/htmlmd fixtures/basic.html
+dist/aarch64-unknown-linux-gnu/htmlmd fixtures/basic.html
 
 # Write to a file
-releases/htmlmd fixtures/basic.html -o output.md
+dist/aarch64-unknown-linux-gnu/htmlmd fixtures/basic.html -o output.md
 
 # Convert from stdin
-cat fixtures/basic.html | releases/htmlmd -
+cat fixtures/basic.html | dist/aarch64-unknown-linux-gnu/htmlmd -
 
 # Use a profile
-releases/htmlmd --profile gfm fixtures/table.html
-releases/htmlmd --profile obsidian --metadata-title fixtures/extended.html
+dist/aarch64-unknown-linux-gnu/htmlmd --profile gfm fixtures/table.html
+dist/aarch64-unknown-linux-gnu/htmlmd --profile obsidian --metadata-title fixtures/extended.html
 ```
 
 ## Profiles
@@ -88,13 +88,13 @@ releases/htmlmd --profile obsidian --metadata-title fixtures/extended.html
 ### Convert a file for GitHub
 
 ```bash
-releases/htmlmd --profile gfm fixtures/table.html
+dist/aarch64-unknown-linux-gnu/htmlmd --profile gfm fixtures/table.html
 ```
 
 ### Convert to Obsidian with frontmatter
 
 ```bash
-releases/htmlmd --profile obsidian \
+dist/aarch64-unknown-linux-gnu/htmlmd --profile obsidian \
   --metadata-title --metadata-description \
   fixtures/extended.html
 ```
@@ -102,31 +102,31 @@ releases/htmlmd --profile obsidian \
 ### Keep only an article element
 
 ```bash
-releases/htmlmd --keep-only-selectors article -o article.md page.html
+dist/aarch64-unknown-linux-gnu/htmlmd --keep-only-selectors article -o article.md page.html
 ```
 
 ### Reference-style links
 
 ```bash
-releases/htmlmd --link-style reference --reference-placement adjacent fixtures/links.html
+dist/aarch64-unknown-linux-gnu/htmlmd --link-style reference --reference-placement adjacent fixtures/links.html
 ```
 
 ### Drop all images
 
 ```bash
-releases/htmlmd --image-mode skip fixtures/image_mode.html
+dist/aarch64-unknown-linux-gnu/htmlmd --image-mode skip fixtures/image_mode.html
 ```
 
 ### Batch conversion
 
 ```bash
-releases/htmlmd --output-dir out/ --manifest manifest.json fixtures/*.html
+dist/aarch64-unknown-linux-gnu/htmlmd --output-dir out/ --manifest manifest.json fixtures/*.html
 ```
 
 ### Use a config file
 
 ```bash
-releases/htmlmd --config htmlmd.toml fixtures/basic.html
+dist/aarch64-unknown-linux-gnu/htmlmd --config htmlmd.toml fixtures/basic.html
 ```
 
 Example `htmlmd.toml`:
@@ -153,7 +153,7 @@ definition-lists = true
 Start the server:
 
 ```bash
-releases/htmlmd-server
+dist/aarch64-unknown-linux-gnu/htmlmd-server
 # listens on http://127.0.0.1:3000
 ```
 
@@ -181,7 +181,7 @@ Response:
 
 ## Gotchas
 
-- If `releases/htmlmd` is missing, run `cargo build -p htmlmd-cli --release` and look in `target/release/htmlmd`.
+- If `dist/aarch64-unknown-linux-gnu/htmlmd` is missing, run `cargo build -p htmlmd-cli --release` and look in `target/release/htmlmd`.
 - `--profile obsidian` only emits YAML frontmatter when metadata extraction flags are provided **and** the HTML contains the metadata.
 - Wikilinks (`[[...]]`) are only generated in the `obsidian` profile for `<a class="wikilink">` or `<a rel="wikilink">` elements.
 - The `target/` directory can be very large; use `cargo clean` when you are done building, but keep the binary you need.

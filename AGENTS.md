@@ -18,14 +18,17 @@ Additional documentation:
 - `docs/PACKAGING.md`
 - `docs/OPTION_REFERENCE.md`
 
-Compiled binaries are kept in the `releases/` directory:
+Compiled binaries are kept per target triple in the `dist/` directory (gitignored):
 
-- `releases/htmlmd`
-- `releases/htmlmd-server`
+- `dist/<target-triple>/htmlmd`
+- `dist/<target-triple>/htmlmd-server`
+- `dist/<target-triple>/SHA256SUMS`
+
+For example, on a Raspberry Pi: `dist/aarch64-unknown-linux-gnu/htmlmd`.
 
 If they are missing, build them with:
 
 ```bash
-cargo build -p htmlmd-cli --release
-cargo build -p htmlmd-server --release
+scripts/build-release.sh                # host target
+scripts/build-release.sh <triple>...    # explicit cross targets
 ```
