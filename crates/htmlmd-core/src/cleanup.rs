@@ -391,7 +391,18 @@ fn set_attr(el: &mut scraper::node::Element, attr_name: &str, value: &str) {
     if let Some(pos) = el.attrs.iter().position(|(n, _)| n == &name) {
         el.attrs[pos].1 = value.into();
     } else {
-        el.attrs.push((name, value.into()));
+        // Insert at the sorted position: scraper's parser stores attributes
+        // sorted by `QualName`, and preserving that invariant keeps the
+        // serialized attribute order identical whether the cleaned document
+        // is re-parsed (scraper re-sorts on parse) or consumed directly.
+        // Backends that embed raw HTML (faithful mode, html-fallback tables)
+        // depend on this for byte-identical output across both paths.
+        let pos = el
+            .attrs
+            .iter()
+            .position(|(n, _)| n > &name)
+            .unwrap_or(el.attrs.len());
+        el.attrs.insert(pos, (name, value.into()));
     }
 }
 

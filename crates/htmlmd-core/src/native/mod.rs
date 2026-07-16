@@ -24,10 +24,10 @@
 //! htmd's one DOM *mutation* (combining similar adjacent inline elements in
 //! `walk_children`) is replicated with a side table; see `dom_walker`.
 
+mod custom_handlers;
 pub(crate) mod dom_walker;
 pub(crate) mod element_handler;
 mod html_escape;
-mod marker_handlers;
 pub(crate) mod node_util;
 pub(crate) mod options;
 pub(crate) mod text_util;
@@ -44,8 +44,7 @@ use crate::backend::ConverterBackend;
 use crate::error::Result;
 use crate::options::{
     BulletMarker, CodeFence, ConversionOptions, HardBreakStyle, HeadingStyle,
-    HrStyle as HtmlMdHrStyle, LinkStyle as HtmlMdLinkStyle, MermaidPolicy, RawHtmlPolicy,
-    ReferencePlacement,
+    HrStyle as HtmlMdHrStyle, LinkStyle as HtmlMdLinkStyle, RawHtmlPolicy, ReferencePlacement,
 };
 use crate::result::ConversionResult;
 
@@ -204,9 +203,8 @@ impl ConverterBackend for NativeBackend {
 
 /// Build a fully configured converter from `ConversionOptions`.
 ///
-/// Mirrors `htmd_handlers::build_converter` minus the custom handlers that
-/// are Phase B work; the marker handlers registered here are the ones active
-/// with default options (see `marker_handlers`).
+/// Mirrors `htmd_handlers::build_converter` exactly: same registration order
+/// and profile gating, with the custom handlers ported in `custom_handlers`.
 fn build_native_converter(options: &ConversionOptions) -> NativeConverter {
     let native_options = build_native_options(options);
 
@@ -222,25 +220,17 @@ fn build_native_converter(options: &ConversionOptions) -> NativeConverter {
         builder = builder.skip_tags(skip_tags);
     }
 
-    // Registration order matches `htmd_handlers::build_converter`: task
-    // lists, then table markers, then mermaid.
-    if options.semantic.task_lists {
-        builder = builder.add_handler(vec!["input"], marker_handlers::task_list_checkbox_handler);
-    }
-    builder = builder.add_handler(vec!["table"], marker_handlers::table_marker_handler);
-    match options.semantic.mermaid {
-        MermaidPolicy::Drop => {
-            builder = builder
-                .add_handler(vec!["pre"], marker_handlers::mermaid_drop_handler)
-                .add_handler(vec!["div"], marker_handlers::mermaid_drop_handler);
-        }
-        MermaidPolicy::Fenced => {
-            builder = builder
-                .add_handler(vec!["pre"], marker_handlers::mermaid_fenced_handler)
-                .add_handler(vec!["div"], marker_handlers::mermaid_fenced_handler);
-        }
-        MermaidPolicy::PreserveHtml => {}
-    }
+    builder = custom_handlers::add_semantic_handlers(builder, options);
+    builder = custom_handlers::add_task_list_handlers(builder, options);
+    builder = custom_handlers::add_footnote_handlers(builder, options);
+    builder = custom_handlers::add_definition_list_handlers(builder, options);
+    builder = custom_handlers::add_table_handlers(builder, options);
+    builder = custom_handlers::add_math_handlers(builder, options);
+    builder = custom_handlers::add_mermaid_handlers(builder, options);
+    builder = custom_handlers::add_alert_handlers(builder, options);
+    builder = custom_handlers::add_wikilink_handlers(builder, options);
+    builder = custom_handlers::add_reference_handlers(builder, options);
+    builder = custom_handlers::add_custom_rule_handlers(builder, options);
 
     builder.build()
 }
