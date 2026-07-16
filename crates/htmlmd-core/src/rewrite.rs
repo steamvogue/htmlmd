@@ -55,11 +55,19 @@ fn rewrite_single_url(
     rules: &CompiledRewriteRules,
     _diagnostics: &mut dyn DiagnosticsCollector,
 ) -> String {
-    // 1. Security checks.
+    // 1. Security checks (case-insensitive without allocating per URL).
     if let Some(scheme) = url.split(':').next() {
-        let scheme = scheme.to_lowercase();
-        if options.cleanup.blocked_url_schemes.contains(&scheme)
-            && !options.cleanup.allowed_url_schemes.contains(&scheme)
+        let blocked = options
+            .cleanup
+            .blocked_url_schemes
+            .iter()
+            .any(|b| b.eq_ignore_ascii_case(scheme));
+        if blocked
+            && !options
+                .cleanup
+                .allowed_url_schemes
+                .iter()
+                .any(|a| a.eq_ignore_ascii_case(scheme))
         {
             return String::new();
         }
@@ -135,6 +143,12 @@ pub(crate) fn choose_largest_srcset<'a>(candidates: &'a [&'a str]) -> &'a str {
 }
 
 fn strip_tracking_params(url: &str, options: &ConversionOptions) -> String {
+    // Fast path: no query, nothing to strip. This also means query-less URLs
+    // are no longer round-tripped through url::Url, so they keep their
+    // original spelling instead of being normalized as a side effect.
+    if !url.contains('?') {
+        return url.to_string();
+    }
     let Ok(parsed) = url::Url::parse(url) else {
         return url.to_string();
     };

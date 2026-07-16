@@ -96,3 +96,34 @@ sequential cleanup passes each scanning the tree with selectors (work raw
 htmd doesn't do at all). Closing further means fusing cleanup passes into
 fewer traversals — tracked as a ROADMAP follow-up, with per-pass profiling
 before any rewrite.
+
+### M3.5 — cleanup-pass fusion (2026-07-16) — ≤1.3× goal met
+
+Per-pass profiling (the `pass_timing` ignored test) showed cleanup cost
+35.6 ms on a wiki-scale document: code-language detection ran its regex
+battery on thousands of *inline* code spans (11.1 ms) where a language class
+has zero output effect; hidden-content removal used six selector scans
+(7.0 ms); remove-tags eight more (5.9 ms); URL rewriting three plus a title
+scan (6.9 ms). Fixes: one fused removal walk, detection restricted to
+`pre code`, one classification walk feeding all per-element passes
+(details/forms/media/custom-elements/tables/images), a fused URL+title
+attribute walk, and a no-query fast path in tracking-param stripping.
+Cleanup now totals **~7.0 ms** on the same document.
+
+| Benchmark | M3 | M3.5 | raw htmd | **overhead** |
+|---|---|---|---|---|
+| corpus/wiki | 77.7 ms | **42.1 ms** | 38.1 ms | **1.10×** |
+| corpus/news | 12.8 ms | **10.9 ms** | 9.2 ms | **1.18×** |
+| corpus/docs | 15.6 ms | **12.6 ms** | 11.7 ms | **1.08×** |
+| corpus/tables | 31.0 ms | **23.2 ms** | 19.5 ms | **1.19×** |
+
+Cumulative since the M0 baseline (same machine, same corpus): **wiki
+978.7 → 42.1 ms (23×), docs 554.1 → 12.6 ms (44×)**, news 2.2×, tables 2.5×.
+The full pipeline — cleanup, tracking-param stripping, language detection,
+safety limits, metadata — now costs 8–19% over the bare-bones library.
+
+One deliberate behavior change: query-less URLs are no longer round-tripped
+through `url::Url`, so `https://example.com` stays as written instead of
+gaining a trailing slash. Three expectations updated accordingly
+(`expected/basic.md` and two inline assertions) — the only expected-output
+edits in the entire M3 line, each a pure URL-spelling diff.

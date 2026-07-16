@@ -377,7 +377,7 @@ fn custom_rules_link_and_image() {
     let html = "<a class='custom-link' href='https://example.com'>Example</a><img class='custom-img' src='pic.png' alt='Pic'>";
     let md = convert(html, &opts).unwrap().markdown;
     eprintln!("CUSTOM LINK IMAGE MD:\n{md}");
-    assert!(md.contains("[Example](https://example.com/)"));
+    assert!(md.contains("[Example](https://example.com)"));
     assert!(md.contains("![Pic](pic.png)"));
 }
 
@@ -461,7 +461,7 @@ fn reference_links_adjacent() {
     assert!(md.contains("[A][ref1]"));
     assert!(md.contains("[ref1]: https://a.com"));
     assert!(md.contains("[B][ref2]"));
-    assert!(md.contains("[ref2]: https://b.com/ \"B site\""));
+    assert!(md.contains("[ref2]: https://b.com \"B site\""));
 }
 
 #[test]

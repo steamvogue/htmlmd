@@ -15,7 +15,6 @@ use crate::rewrite::{CompiledRewriteRules, choose_largest_srcset, rewrite_url_at
 use once_cell::sync::Lazy;
 
 // Selectors used inside per-table / per-row loops; parsed once per process.
-static SEL_TABLE: Lazy<Selector> = Lazy::new(|| Selector::parse("table").unwrap());
 static SEL_NESTED_TABLE: Lazy<Selector> = Lazy::new(|| Selector::parse("table table").unwrap());
 static SEL_TR: Lazy<Selector> = Lazy::new(|| Selector::parse("tr").unwrap());
 static SEL_CELLS: Lazy<Selector> = Lazy::new(|| Selector::parse("td, th").unwrap());
@@ -53,8 +52,7 @@ pub fn clean_html_to_dom(
     // Extract metadata from the original document before any destructive cleanup.
     let metadata = extract_metadata(&document, options);
 
-    remove_hidden(&mut document, options);
-    apply_remove_tags(&mut document, options);
+    apply_removals(&mut document, options);
     apply_footnote_cleanup(&mut document, options);
     apply_per_tag_behavior(&mut document, options);
     apply_heading_offset(&mut document, options);
@@ -62,19 +60,19 @@ pub fn clean_html_to_dom(
     apply_unwrap_selectors(&mut document, options, path, diagnostics)?;
     apply_keep_only(&mut document, options, path, diagnostics)?;
     apply_custom_rules(&mut document, options, path, diagnostics)?;
-    apply_details_handling(&mut document, options);
-    apply_form_handling(&mut document, options);
-    apply_custom_elements(&mut document, options);
-    apply_table_handling(&mut document, options);
-    apply_media_policy(&mut document, options);
-    apply_code_language_detection(&mut document, options);
-    apply_image_handling(&mut document, options);
+    // One classification walk feeds all per-element passes below; each pass
+    // previously paid for its own full-tree selector scan.
+    let buckets = collect_element_buckets(&document, options);
+    apply_details_handling(&mut document, options, &buckets.details);
+    apply_form_handling(&mut document, options, &buckets.forms);
+    apply_custom_elements(&mut document, options, &buckets.custom_elements);
+    apply_table_handling(&mut document, options, &buckets.tables);
+    apply_media_policy(&mut document, options, &buckets);
+    apply_code_language_detection(&mut document, options, &buckets.pre_code);
+    apply_image_handling(&mut document, options, &buckets.images);
     apply_custom_rule_markers(&mut document, options, path, diagnostics)?;
+    // Also strips title attributes when configured — one shared walk.
     apply_url_rewriting(&mut document, options, diagnostics)?;
-
-    if options.render.title_attribute == TitleHandling::Ignore {
-        strip_attribute(&mut document, "title");
-    }
 
     Ok((document, metadata))
 }
@@ -175,17 +173,121 @@ fn max_attribute_len(document: &Html) -> u64 {
         .unwrap_or(0)
 }
 
-fn apply_remove_tags(document: &mut Html, options: &ConversionOptions) {
-    for tag in &options.cleanup.remove_tags {
-        let selector_str = if tag.eq_ignore_ascii_case("script") && options.semantic.math.enabled {
-            r#"script:not([type^="math/"]):not([type^="text/asciimath"])"#
-        } else {
-            tag
-        };
-        let Ok(selector) = Selector::parse(selector_str) else {
+/// Per-element work lists produced by [`collect_element_buckets`] in a single
+/// tree walk. The sets match what the former one-scan-per-pass sequence would
+/// have seen at the same pipeline position; passes that mutate structure
+/// tolerate since-detached nodes (see `unwrap_node` / `replace_with_text`
+/// guards), which reproduces the "later scan doesn't see removed nodes"
+/// semantics of the sequential version.
+#[derive(Default)]
+struct ElementBuckets {
+    details: Vec<NodeId>,
+    forms: Vec<NodeId>,
+    figures: Vec<NodeId>,
+    figcaptions: Vec<NodeId>,
+    media_av: Vec<NodeId>,
+    media_sources: Vec<NodeId>,
+    custom_elements: Vec<NodeId>,
+    tables: Vec<NodeId>,
+    images: Vec<NodeId>,
+    pre_code: Vec<NodeId>,
+}
+
+fn collect_element_buckets(document: &Html, options: &ConversionOptions) -> ElementBuckets {
+    let want_details = options.cleanup.details_handling != DetailsHandling::Expand;
+    let want_forms = matches!(
+        options.cleanup.form_handling,
+        FormHandling::Drop | FormHandling::Readable
+    );
+    let want_custom = options.cleanup.custom_element_policy != CustomElementPolicy::PreserveHtml;
+    let want_code =
+        options.semantic.detect_languages || !options.semantic.code_language_patterns.is_empty();
+
+    let mut buckets = ElementBuckets::default();
+    for node in document.tree.root().descendants() {
+        let Some(el) = node.value().as_element() else {
             continue;
         };
-        detach_selected(document, &selector);
+        match el.name() {
+            "details" if want_details => buckets.details.push(node.id()),
+            "form" if want_forms => buckets.forms.push(node.id()),
+            "figure" => buckets.figures.push(node.id()),
+            "figcaption" => buckets.figcaptions.push(node.id()),
+            "video" | "audio" => buckets.media_av.push(node.id()),
+            "source" => buckets.media_sources.push(node.id()),
+            "table" => buckets.tables.push(node.id()),
+            "img" => buckets.images.push(node.id()),
+            "code" if want_code && has_pre_ancestor(&node) => buckets.pre_code.push(node.id()),
+            name if want_custom
+                && name.contains('-')
+                && !name.eq_ignore_ascii_case("annotation-xml") =>
+            {
+                buckets.custom_elements.push(node.id());
+            }
+            _ => {}
+        }
+    }
+    buckets
+}
+
+fn has_pre_ancestor(node: &NodeRef<'_, Node>) -> bool {
+    node.ancestors().any(|a| {
+        a.value()
+            .as_element()
+            .is_some_and(|el| el.name().eq_ignore_ascii_case("pre"))
+    })
+}
+
+/// Fused removal pass: hidden-content policy and `remove-tags` in a single
+/// tree walk instead of up to fourteen selector scans. Both only detach
+/// nodes, so combining them is order-independent and byte-equivalent.
+fn apply_removals(document: &mut Html, options: &ConversionOptions) {
+    let hide = options.cleanup.hidden_content_policy == HiddenContentPolicy::Hide;
+    let keep_math_scripts = options.semantic.math.enabled;
+    let remove_tags: std::collections::HashSet<String> = options
+        .cleanup
+        .remove_tags
+        .iter()
+        .map(|t| t.to_ascii_lowercase())
+        .collect();
+
+    if !hide && remove_tags.is_empty() {
+        return;
+    }
+
+    let mut ids: Vec<NodeId> = Vec::new();
+    for node in document.tree.root().descendants() {
+        let Some(el) = node.value().as_element() else {
+            continue;
+        };
+        let name = el.name();
+
+        let mut kill = remove_tags.contains(name);
+        // `remove-tags: script` must not eat math payloads when math is on.
+        if kill && name == "script" && keep_math_scripts {
+            let ty = el.attr("type").unwrap_or("");
+            if ty.starts_with("math/") || ty.starts_with("text/asciimath") {
+                kill = false;
+            }
+        }
+        if !kill && hide {
+            kill = el.attr("hidden").is_some()
+                || el.attr("aria-hidden") == Some("true")
+                || el.attr("style").is_some_and(|s| {
+                    s.contains("display:none")
+                        || s.contains("display: none")
+                        || s.contains("visibility:hidden")
+                        || s.contains("visibility: hidden")
+                });
+        }
+        if kill {
+            ids.push(node.id());
+        }
+    }
+    for id in ids {
+        if let Some(mut node) = document.tree.get_mut(id) {
+            node.detach();
+        }
     }
 }
 
@@ -344,26 +446,6 @@ fn prune_to_single_element(document: &mut Html, keep_id: NodeId) {
     }
 }
 
-fn remove_hidden(document: &mut Html, options: &ConversionOptions) {
-    if options.cleanup.hidden_content_policy == HiddenContentPolicy::Show {
-        return;
-    }
-
-    let selectors = [
-        "[hidden]",
-        "[aria-hidden=\"true\"]",
-        "[style*=\"display:none\"]",
-        "[style*=\"display: none\"]",
-        "[style*=\"visibility:hidden\"]",
-        "[style*=\"visibility: hidden\"]",
-    ];
-    for s in selectors {
-        if let Ok(selector) = Selector::parse(s) {
-            detach_selected(document, &selector);
-        }
-    }
-}
-
 fn apply_url_rewriting(
     document: &mut Html,
     options: &ConversionOptions,
@@ -377,15 +459,29 @@ fn apply_url_rewriting(
 
     // Compile rewrite-rule regexes once per conversion, not per URL.
     let rules = CompiledRewriteRules::from_options(options);
+    // Title stripping shares this walk instead of paying for its own scan;
+    // the two operate on disjoint attributes, so the merge is byte-neutral.
+    let strip_title = options.render.title_attribute == TitleHandling::Ignore;
 
-    let url_attrs = ["href", "src", "srcset"];
-    for attr in url_attrs {
-        let selector_str = format!("[{attr}]");
-        let Ok(selector) = Selector::parse(&selector_str) else {
-            continue;
-        };
-        let matches: Vec<_> = document.select(&selector).map(|e| (e.id(), attr)).collect();
-        for (id, attr_name) in matches {
+    const URL_ATTRS: [&str; 3] = ["href", "src", "srcset"];
+
+    // One walk finds every element carrying URL (or title) attributes,
+    // replacing three or four full selector scans.
+    let targets: Vec<NodeId> = document
+        .tree
+        .root()
+        .descendants()
+        .filter(|node| {
+            node.value().as_element().is_some_and(|el| {
+                URL_ATTRS.iter().any(|a| el.attr(a).is_some())
+                    || (strip_title && el.attr("title").is_some())
+            })
+        })
+        .map(|node| node.id())
+        .collect();
+
+    for id in targets {
+        for attr_name in URL_ATTRS {
             let Some(mut node) = document.tree.get_mut(id) else {
                 continue;
             };
@@ -408,26 +504,19 @@ fn apply_url_rewriting(
                 &rules,
                 diagnostics,
             );
-            set_attr(el, attr_name, &rewritten);
+            if rewritten != original {
+                set_attr(el, attr_name, &rewritten);
+            }
+        }
+        if strip_title {
+            if let Some(mut node) = document.tree.get_mut(id) {
+                if let Node::Element(ref mut el) = *node.value() {
+                    remove_attr(el, "title");
+                }
+            }
         }
     }
     Ok(())
-}
-
-fn strip_attribute(document: &mut Html, attr_name: &str) {
-    let Ok(selector) = Selector::parse(&format!("[{attr_name}]")) else {
-        return;
-    };
-    let ids: Vec<_> = document.select(&selector).map(|e| e.id()).collect();
-    for id in ids {
-        let Some(mut node) = document.tree.get_mut(id) else {
-            continue;
-        };
-        let Node::Element(ref mut el) = *node.value() else {
-            continue;
-        };
-        remove_attr(el, attr_name);
-    }
 }
 
 fn set_attr(el: &mut scraper::node::Element, attr_name: &str, value: &str) {
@@ -529,18 +618,13 @@ fn select_meta(document: &Html, selector: &str, attr: &str) -> Option<String> {
 
 // --- Phase 2 semantic / media / image handling ---
 
-fn apply_image_handling(document: &mut Html, options: &ConversionOptions) {
+fn apply_image_handling(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
     if options.cleanup.image_mode == ImageMode::Skip {
-        detach_by_tag(document, "img");
+        detach_ids(document, ids);
         return;
     }
 
-    let Ok(img_sel) = Selector::parse("img") else {
-        return;
-    };
-    let ids: Vec<NodeId> = document.select(&img_sel).map(|e| e.id()).collect();
-
-    for id in ids {
+    for &id in ids {
         promote_lazy_image(document, id, options);
         promote_srcset(document, id, options);
         if options.cleanup.preserve_image_metadata {
@@ -713,38 +797,40 @@ fn image_alt(document: &Html, id: NodeId) -> String {
         .unwrap_or_default()
 }
 
-fn apply_media_policy(document: &mut Html, options: &ConversionOptions) {
+fn apply_media_policy(document: &mut Html, options: &ConversionOptions, buckets: &ElementBuckets) {
     match options.cleanup.media_policy {
         MediaPolicy::Drop => {
-            for tag in ["video", "audio", "source", "figure", "figcaption"] {
-                detach_by_tag(document, tag);
+            for ids in [
+                &buckets.media_av,
+                &buckets.media_sources,
+                &buckets.figures,
+                &buckets.figcaptions,
+            ] {
+                detach_ids(document, ids);
             }
         }
         MediaPolicy::Placeholder => {
-            for tag in ["video", "audio"] {
-                media_placeholder(document, tag);
-            }
-            unwrap_by_tag(document, "figure");
+            media_placeholder(document, &buckets.media_av);
+            unwrap_ids(document, &buckets.figures);
         }
         MediaPolicy::Inline | MediaPolicy::Link => {
-            unwrap_by_tag(document, "figure");
+            unwrap_ids(document, &buckets.figures);
         }
     }
 }
 
-fn media_placeholder(document: &mut Html, tag: &str) {
-    let Ok(sel) = Selector::parse(tag) else {
-        return;
-    };
-    let ids: Vec<NodeId> = document.select(&sel).map(|e| e.id()).collect();
-    for id in ids {
-        let src = document
-            .tree
-            .get(id)
-            .and_then(|n| n.value().as_element())
-            .and_then(|el| el.attrs.iter().find(|(n, _)| n.local.as_ref() == "src"))
-            .map(|(_, v)| v.to_string());
-        let label = tag.to_ascii_uppercase();
+fn media_placeholder(document: &mut Html, ids: &[NodeId]) {
+    for &id in ids {
+        let Some((label, src)) = document.tree.get(id).and_then(|n| {
+            n.value().as_element().map(|el| {
+                (
+                    el.name().to_ascii_uppercase(),
+                    el.attr("src").map(|s| s.to_string()),
+                )
+            })
+        }) else {
+            continue;
+        };
         let text = match src {
             Some(s) if !s.is_empty() => format!("({label}: {s})"),
             _ => format!("({label})"),
@@ -753,17 +839,11 @@ fn media_placeholder(document: &mut Html, tag: &str) {
     }
 }
 
-fn apply_details_handling(document: &mut Html, options: &ConversionOptions) {
+fn apply_details_handling(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
     match options.cleanup.details_handling {
-        DetailsHandling::Drop => {
-            detach_by_tag(document, "details");
-        }
+        DetailsHandling::Drop => detach_ids(document, ids),
         DetailsHandling::SummaryOnly => {
-            let Ok(sel) = Selector::parse("details") else {
-                return;
-            };
-            let ids: Vec<NodeId> = document.select(&sel).map(|e| e.id()).collect();
-            for id in ids {
+            for &id in ids {
                 let summary = first_summary_text(document, id);
                 replace_with_text(document, id, &summary);
             }
@@ -786,17 +866,11 @@ fn first_summary_text(document: &Html, details_id: NodeId) -> String {
     String::new()
 }
 
-fn apply_form_handling(document: &mut Html, options: &ConversionOptions) {
+fn apply_form_handling(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
     match options.cleanup.form_handling {
-        FormHandling::Drop => {
-            detach_by_tag(document, "form");
-        }
+        FormHandling::Drop => detach_ids(document, ids),
         FormHandling::Readable => {
-            let Ok(sel) = Selector::parse("form") else {
-                return;
-            };
-            let ids: Vec<NodeId> = document.select(&sel).map(|e| e.id()).collect();
-            for id in ids {
+            for &id in ids {
                 let text = form_readable_text(document, id);
                 replace_with_text(document, id, &text);
             }
@@ -886,44 +960,11 @@ fn find_label(node: &ego_tree::NodeRef<'_, Node>) -> Option<String> {
     None
 }
 
-fn apply_custom_elements(document: &mut Html, options: &ConversionOptions) {
+fn apply_custom_elements(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
     match options.cleanup.custom_element_policy {
-        CustomElementPolicy::Unwrap => unwrap_hyphenated(document),
-        CustomElementPolicy::Drop => drop_hyphenated(document),
+        CustomElementPolicy::Unwrap => unwrap_ids(document, ids),
+        CustomElementPolicy::Drop => detach_ids(document, ids),
         CustomElementPolicy::PreserveHtml => {}
-    }
-}
-
-fn hyphenated_element_ids(document: &Html) -> Vec<NodeId> {
-    document
-        .tree
-        .nodes()
-        .filter(|n| {
-            n.value()
-                .as_element()
-                .map(|el| {
-                    let name = el.name();
-                    name.contains('-') && !name.eq_ignore_ascii_case("annotation-xml")
-                })
-                .unwrap_or(false)
-        })
-        .map(|n| n.id())
-        .collect()
-}
-
-fn unwrap_hyphenated(document: &mut Html) {
-    let ids = hyphenated_element_ids(document);
-    for id in ids {
-        unwrap_node(document, id);
-    }
-}
-
-fn drop_hyphenated(document: &mut Html) {
-    let ids = hyphenated_element_ids(document);
-    for id in ids {
-        if let Some(mut node) = document.tree.get_mut(id) {
-            node.detach();
-        }
     }
 }
 
@@ -1130,10 +1171,8 @@ fn apply_custom_rule_markers(
     Ok(())
 }
 
-fn apply_table_handling(document: &mut Html, options: &ConversionOptions) {
-    let ids: Vec<NodeId> = document.select(&SEL_TABLE).map(|e| e.id()).collect();
-
-    for id in ids {
+fn apply_table_handling(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
+    for &id in ids {
         let is_complex = is_complex_table(document, id);
         let handling = match options.semantic.table_handling {
             TableHandling::Gfm if is_complex => match options.semantic.difficult_table_strategy {
@@ -1234,14 +1273,13 @@ fn html_fallback_table(document: &mut Html, id: NodeId) {
     set_attr(el, "data-htmlmd-table", "html");
 }
 
-fn apply_code_language_detection(document: &mut Html, options: &ConversionOptions) {
-    if options.semantic.code_language_patterns.is_empty() && !options.semantic.detect_languages {
+fn apply_code_language_detection(document: &mut Html, options: &ConversionOptions, ids: &[NodeId]) {
+    // The bucket only contains `code` under `pre` (fenced blocks): a language
+    // class on inline code has zero output effect, so running detection on
+    // the (often thousands of) inline code spans is pure waste.
+    if ids.is_empty() {
         return;
     }
-
-    let Ok(code_sel) = Selector::parse("pre code, code") else {
-        return;
-    };
 
     // User-configured patterns come from the process-wide cache, so their
     // compile cost is paid once per process, not per element or conversion.
@@ -1252,8 +1290,7 @@ fn apply_code_language_detection(document: &mut Html, options: &ConversionOption
         .filter_map(|p| crate::regex_cache::cached_regex(p))
         .collect();
 
-    let ids: Vec<NodeId> = document.select(&code_sel).map(|e| e.id()).collect();
-    for id in ids {
+    for &id in ids {
         let pre_class = document
             .tree
             .get(id)
@@ -1386,6 +1423,11 @@ fn detect_language_from_code(text: &str) -> Option<&'static str> {
 // --- low-level DOM helpers ---
 
 fn replace_with_text(document: &mut Html, id: NodeId, text: &str) {
+    // A node detached by an earlier pass has no parent; inserting a sibling
+    // would panic, and the node is invisible to output anyway.
+    if document.tree.get(id).is_none_or(|n| n.parent().is_none()) {
+        return;
+    }
     let Some(mut target) = document.tree.get_mut(id) else {
         return;
     };
@@ -1421,19 +1463,26 @@ fn collect_text(node: &NodeRef<'_, Node>, out: &mut String) {
     }
 }
 
-fn detach_by_tag(document: &mut Html, tag: &str) {
-    if let Ok(sel) = Selector::parse(tag) {
-        detach_selected(document, &sel);
+fn detach_ids(document: &mut Html, ids: &[NodeId]) {
+    for &id in ids {
+        if let Some(mut node) = document.tree.get_mut(id) {
+            node.detach();
+        }
     }
 }
 
-fn unwrap_by_tag(document: &mut Html, tag: &str) {
-    if let Ok(sel) = Selector::parse(tag) {
-        unwrap_selected(document, &sel);
+fn unwrap_ids(document: &mut Html, ids: &[NodeId]) {
+    for &id in ids {
+        unwrap_node(document, id);
     }
 }
 
 fn unwrap_node(document: &mut Html, id: NodeId) {
+    // See replace_with_text: unwrapping an already-detached node would try to
+    // insert siblings on an orphan.
+    if document.tree.get(id).is_none_or(|n| n.parent().is_none()) {
+        return;
+    }
     let child_ids: Vec<NodeId> = document
         .tree
         .get(id)
@@ -1448,4 +1497,148 @@ fn unwrap_node(document: &mut Html, id: NodeId) {
         let _ = target.insert_id_before(child_id);
     }
     target.detach();
+}
+
+#[cfg(test)]
+mod pass_profile {
+    //! Diagnostic (not a correctness test): per-pass timing for the cleanup
+    //! pipeline on a wiki-scale document. Run with
+    //! `cargo test -p htmlmd-core --release pass_timing -- --ignored --nocapture`.
+    use super::*;
+    use std::fmt::Write as _;
+    use std::time::Instant;
+
+    fn wiki_doc() -> String {
+        let mut html = String::with_capacity(1_100_000);
+        html.push_str("<html><head><title>T</title></head><body>");
+        for s in 0..200 {
+            let _ = write!(html, "<h2>Section {s}</h2>");
+            for p in 0..10 {
+                let _ = write!(
+                    html,
+                    "<p>Paragraph {p} of section {s} discusses the \
+                     <a href=\"/wiki/Topic_{s}\">principal topic</a> with <b>bold</b>, \
+                     <i>italics</i>, <a href=\"https://example.org/ref/{s}/{p}\">refs</a>, \
+                     inline <code>code()</code> and filler text to reach realistic length \
+                     for an encyclopedia paragraph of ordinary prose and some more filler \
+                     <sup><a href=\"#fn{s}\">[{s}]</a></sup>.</p>"
+                );
+            }
+            if s % 6 == 0 {
+                html.push_str("<table><tbody>");
+                for r in 0..10 {
+                    let _ = write!(html, "<tr><td>19{r:02}</td><td>Event {r}</td></tr>");
+                }
+                html.push_str("</tbody></table>");
+            }
+            if s % 9 == 0 {
+                let _ = write!(
+                    html,
+                    "<pre><code class=\"language-rust\">fn f_{s}() -> u32 {{ {s} }}</code></pre>"
+                );
+            }
+        }
+        html.push_str("</body></html>");
+        html
+    }
+
+    #[test]
+    #[ignore = "diagnostic timing, not a correctness test"]
+    fn pass_timing() {
+        let html = wiki_doc();
+        let options = ConversionOptions::default();
+        let mut d: Vec<Diagnostic> = Vec::new();
+
+        macro_rules! t {
+            ($label:expr, $e:expr) => {{
+                let start = Instant::now();
+                let out = $e;
+                eprintln!(
+                    "{:<32} {:>10.3} ms",
+                    $label,
+                    start.elapsed().as_secs_f64() * 1e3
+                );
+                out
+            }};
+        }
+
+        let mut document = t!("parse", Html::parse_document(&html));
+        t!(
+            "check_limits",
+            check_limits(&html, &document, &options, &mut d).unwrap()
+        );
+        t!(
+            "extract_metadata",
+            drop(extract_metadata(&document, &options))
+        );
+        t!("apply_removals", apply_removals(&mut document, &options));
+        t!(
+            "apply_footnote_cleanup",
+            apply_footnote_cleanup(&mut document, &options)
+        );
+        t!(
+            "apply_per_tag_behavior",
+            apply_per_tag_behavior(&mut document, &options)
+        );
+        t!(
+            "apply_heading_offset",
+            apply_heading_offset(&mut document, &options)
+        );
+        t!(
+            "apply_remove_selectors",
+            apply_remove_selectors(&mut document, &options, None, &mut d).unwrap()
+        );
+        t!(
+            "apply_unwrap_selectors",
+            apply_unwrap_selectors(&mut document, &options, None, &mut d).unwrap()
+        );
+        t!(
+            "apply_keep_only",
+            apply_keep_only(&mut document, &options, None, &mut d).unwrap()
+        );
+        t!(
+            "apply_custom_rules",
+            apply_custom_rules(&mut document, &options, None, &mut d).unwrap()
+        );
+        let buckets = t!(
+            "collect_element_buckets",
+            collect_element_buckets(&document, &options)
+        );
+        t!(
+            "apply_details_handling",
+            apply_details_handling(&mut document, &options, &buckets.details)
+        );
+        t!(
+            "apply_form_handling",
+            apply_form_handling(&mut document, &options, &buckets.forms)
+        );
+        t!(
+            "apply_custom_elements",
+            apply_custom_elements(&mut document, &options, &buckets.custom_elements)
+        );
+        t!(
+            "apply_table_handling",
+            apply_table_handling(&mut document, &options, &buckets.tables)
+        );
+        t!(
+            "apply_media_policy",
+            apply_media_policy(&mut document, &options, &buckets)
+        );
+        t!(
+            "apply_code_language_detection",
+            apply_code_language_detection(&mut document, &options, &buckets.pre_code)
+        );
+        t!(
+            "apply_image_handling",
+            apply_image_handling(&mut document, &options, &buckets.images)
+        );
+        t!(
+            "apply_custom_rule_markers",
+            apply_custom_rule_markers(&mut document, &options, None, &mut d).unwrap()
+        );
+        t!(
+            "apply_url_rewriting",
+            apply_url_rewriting(&mut document, &options, &mut d).unwrap()
+        );
+    }
 }

@@ -147,7 +147,7 @@ structural cost and the last thing between htmlmd and the minimal libraries.
 Acceptance: `BENCHMARKS.md` shows wrapper-overhead-vs-htmd ratio ≤ ~1.3× on
 the plain corpus; memory high-water mark roughly halved on the 1.4 MB page.
 
-## M3.5 — Cleanup-pass fusion (follow-up from M3's honest scorecard)
+## M3.5 — Cleanup-pass fusion — ✅ done 2026-07-16 (measured: cleanup 35.6→7.0 ms; overhead vs raw htmd now **1.08–1.19×**, goal met)
 
 The post-M3 overhead vs raw htmd (1.46–2.07×) is dominated by `clean_html`'s
 ~15 sequential DOM passes, each walking the tree with selector scans.
