@@ -34,6 +34,7 @@ rayon = { workspace = true, optional = true }
 insta = { workspace = true }
 tempfile = { workspace = true }
 criterion = { workspace = true }
+mimalloc = { workspace = true }
 
 [[bench]]
 name = "convert_bench"

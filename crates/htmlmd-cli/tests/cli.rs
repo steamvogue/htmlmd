@@ -32,7 +32,9 @@ fn heading_style_setex() {
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
     cmd.args(["--heading-style", "setex"])
         .arg(fixture_dir().join("basic.html"));
-    cmd.assert().success().stdout(contains("Hello World\n====="));
+    cmd.assert()
+        .success()
+        .stdout(contains("Hello World\n====="));
 }
 
 #[test]
@@ -48,7 +50,9 @@ fn skip_tags_flag() {
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
     cmd.args(["--skip-tags", "a"])
         .arg(fixture_dir().join("basic.html"));
-    cmd.assert().success().stdout(contains("Example link").not());
+    cmd.assert()
+        .success()
+        .stdout(contains("Example link").not());
 }
 
 #[test]
@@ -64,7 +68,10 @@ fn extract_selector() {
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
     cmd.args(["--extract-selector", "ul"])
         .arg(fixture_dir().join("basic.html"));
-    cmd.assert().success().stdout(contains("First item")).stdout(contains("Hello World").not());
+    cmd.assert()
+        .success()
+        .stdout(contains("First item"))
+        .stdout(contains("Hello World").not());
 }
 
 #[test]
@@ -72,7 +79,9 @@ fn base_url_resolves_relative() {
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
     cmd.args(["--base-url", "https://example.com/blog/"])
         .arg(fixture_dir().join("links.html"));
-    cmd.assert().success().stdout(contains("https://example.com/page"));
+    cmd.assert()
+        .success()
+        .stdout(contains("https://example.com/page"));
 }
 
 #[test]
@@ -95,23 +104,36 @@ fn print_default_config() {
 #[test]
 fn config_file_overrides_profile() {
     let config = tempfile::NamedTempFile::with_suffix(".toml").unwrap();
-    fs::write(config.path(), "profile = \"gfm\"\n[render]\nhr-style = \"underscores\"\n").unwrap();
+    fs::write(
+        config.path(),
+        "profile = \"gfm\"\n[render]\nhr-style = \"underscores\"\n",
+    )
+    .unwrap();
 
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
     cmd.args(["--config", config.path().to_str().unwrap()])
         .arg(fixture_dir().join("table.html"));
-    cmd.assert().success().stdout(contains("| Language | Type        |"));
+    cmd.assert()
+        .success()
+        .stdout(contains("| Language | Type        |"));
 }
 
 #[test]
 fn invalid_config_selector_fails() {
     let config = tempfile::NamedTempFile::with_suffix(".toml").unwrap();
-    fs::write(config.path(), "[cleanup]\nremove-selectors = [\"<<<bad\"]\n").unwrap();
+    fs::write(
+        config.path(),
+        "[cleanup]\nremove-selectors = [\"<<<bad\"]\n",
+    )
+    .unwrap();
 
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
     cmd.args(["--config", config.path().to_str().unwrap()])
         .arg(fixture_dir().join("basic.html"));
-    cmd.assert().failure().code(2).stderr(contains("invalid selector"));
+    cmd.assert()
+        .failure()
+        .code(2)
+        .stderr(contains("invalid selector"));
 }
 
 #[test]
@@ -129,7 +151,11 @@ fn batch_output_dir() {
     assert!(basic.exists());
     assert!(table.exists());
     assert!(fs::read_to_string(basic).unwrap().contains("# Hello World"));
-    assert!(fs::read_to_string(table).unwrap().contains("| Language | Type        |"));
+    assert!(
+        fs::read_to_string(table)
+            .unwrap()
+            .contains("| Language | Type        |")
+    );
 }
 
 #[test]
@@ -182,7 +208,10 @@ fn output_policy_fail_if_exists() {
         .arg("--output-policy")
         .arg("fail-if-exists")
         .arg(fixture_dir().join("basic.html"));
-    cmd.assert().failure().code(2).stderr(contains("already exists"));
+    cmd.assert()
+        .failure()
+        .code(2)
+        .stderr(contains("already exists"));
 }
 
 #[test]
@@ -225,7 +254,9 @@ fn check_mode_passes_when_unchanged() {
     let out = out_dir.path().join("basic.md");
 
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
-    cmd.arg("-o").arg(&out).arg(fixture_dir().join("basic.html"));
+    cmd.arg("-o")
+        .arg(&out)
+        .arg(fixture_dir().join("basic.html"));
     cmd.assert().success();
 
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
@@ -331,7 +362,6 @@ fn metadata_flags_extract_title() {
     cmd.assert().success();
 }
 
-
 #[test]
 fn link_style_reference() {
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
@@ -346,8 +376,13 @@ fn link_style_reference() {
 #[test]
 fn reference_placement_adjacent() {
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
-    cmd.args(["--link-style", "reference", "--reference-placement", "adjacent"])
-        .arg(fixture_dir().join("links.html"));
+    cmd.args([
+        "--link-style",
+        "reference",
+        "--reference-placement",
+        "adjacent",
+    ])
+    .arg(fixture_dir().join("links.html"));
     cmd.assert()
         .success()
         .stdout(contains("[ref1]: /page"))
@@ -366,8 +401,13 @@ fn reference_placement_section_end() {
     .unwrap();
 
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
-    cmd.args(["--link-style", "reference", "--reference-placement", "section-end"])
-        .arg(&input);
+    cmd.args([
+        "--link-style",
+        "reference",
+        "--reference-placement",
+        "section-end",
+    ])
+    .arg(&input);
     cmd.assert()
         .success()
         .stdout(contains("[ref1]: /a"))

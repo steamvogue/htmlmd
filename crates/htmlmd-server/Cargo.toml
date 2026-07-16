@@ -8,6 +8,10 @@ repository.workspace = true
 rust-version.workspace = true
 description = "HTTP server exposing the htmlmd conversion API."
 
+[features]
+default = ["mimalloc"]
+mimalloc = ["dep:mimalloc"]
+
 [dependencies]
 htmlmd-core = { workspace = true }
 axum = "0.8"
@@ -16,3 +20,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+mimalloc = { workspace = true, optional = true }

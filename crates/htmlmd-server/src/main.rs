@@ -1,14 +1,15 @@
 use axum::{
+    Json, Router,
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
-use htmlmd_core::{
-    convert, ConversionOptions, ConversionResult,
-    diagnostic::Diagnostic,
-};
+use htmlmd_core::{ConversionOptions, ConversionResult, convert, diagnostic::Diagnostic};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Deserialize)]
 struct ConvertRequest {

@@ -7,10 +7,20 @@ use scraper::{Html, Node, Selector};
 use crate::diagnostic::{Diagnostic, DiagnosticsCollector};
 use crate::error::{Error, Result};
 use crate::options::{
-    ConversionOptions, CustomElementPolicy, CustomRuleAction, DetailsHandling, DifficultTableStrategy,
-    FormHandling, HiddenContentPolicy, ImageMode, MediaPolicy, TableHandling, TitleHandling,
+    ConversionOptions, CustomElementPolicy, CustomRuleAction, DetailsHandling,
+    DifficultTableStrategy, FormHandling, HiddenContentPolicy, ImageMode, MediaPolicy,
+    TableHandling, TitleHandling,
 };
-use crate::rewrite::rewrite_url_attr;
+use crate::rewrite::{CompiledRewriteRules, rewrite_url_attr};
+use once_cell::sync::Lazy;
+
+// Selectors used inside per-table / per-row loops; parsed once per process.
+static SEL_TABLE: Lazy<Selector> = Lazy::new(|| Selector::parse("table").unwrap());
+static SEL_NESTED_TABLE: Lazy<Selector> = Lazy::new(|| Selector::parse("table table").unwrap());
+static SEL_TR: Lazy<Selector> = Lazy::new(|| Selector::parse("tr").unwrap());
+static SEL_CELLS: Lazy<Selector> = Lazy::new(|| Selector::parse("td, th").unwrap());
+static SEL_SPAN_CELLS: Lazy<Selector> =
+    Lazy::new(|| Selector::parse("[rowspan], [colspan]").unwrap());
 
 /// Apply HTML cleanup, content selection, and URL rewriting to a string of HTML.
 ///
@@ -86,7 +96,10 @@ fn check_limits(
     if limits.max_node_count > 0 {
         let count = document.tree.nodes().count() as u64;
         if count > limits.max_node_count {
-            let msg = format!("DOM node count {count} exceeds limit {}", limits.max_node_count);
+            let msg = format!(
+                "DOM node count {count} exceeds limit {}",
+                limits.max_node_count
+            );
             if options.strict {
                 return Err(Error::LimitExceeded(msg));
             }
@@ -302,6 +315,9 @@ fn apply_url_rewriting(
         .as_deref()
         .and_then(|u| url::Url::parse(u).ok());
 
+    // Compile rewrite-rule regexes once per conversion, not per URL.
+    let rules = CompiledRewriteRules::from_options(options);
+
     let url_attrs = ["href", "src", "srcset"];
     for attr in url_attrs {
         let selector_str = format!("[{attr}]");
@@ -324,7 +340,14 @@ fn apply_url_rewriting(
             else {
                 continue;
             };
-            let rewritten = rewrite_url_attr(&original, attr_name, base.as_ref(), options, diagnostics);
+            let rewritten = rewrite_url_attr(
+                &original,
+                attr_name,
+                base.as_ref(),
+                options,
+                &rules,
+                diagnostics,
+            );
             set_attr(el, attr_name, &rewritten);
         }
     }
@@ -433,7 +456,6 @@ fn select_meta(document: &Html, selector: &str, attr: &str) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
-
 // --- Phase 2 semantic / media / image handling ---
 
 fn apply_image_handling(document: &mut Html, options: &ConversionOptions) {
@@ -466,15 +488,13 @@ fn apply_image_handling(document: &mut Html, options: &ConversionOptions) {
     }
 }
 
-fn extract_language(class_value: &str, patterns: &[String]) -> Option<String> {
-    for pat in patterns {
-        if let Ok(re) = regex::Regex::new(pat) {
-            if let Some(caps) = re.captures(class_value) {
-                if let Some(m) = caps.name("lang").or_else(|| caps.get(1)) {
-                    let lang = m.as_str().to_string();
-                    if !lang.is_empty() {
-                        return Some(lang);
-                    }
+fn extract_language(class_value: &str, patterns: &[regex::Regex]) -> Option<String> {
+    for re in patterns {
+        if let Some(caps) = re.captures(class_value) {
+            if let Some(m) = caps.name("lang").or_else(|| caps.get(1)) {
+                let lang = m.as_str().to_string();
+                if !lang.is_empty() {
+                    return Some(lang);
                 }
             }
         }
@@ -490,7 +510,10 @@ fn promote_lazy_image(document: &mut Html, id: NodeId, options: &ConversionOptio
         return;
     };
 
-    let has_src = el.attrs.iter().any(|(name, _)| name.local.as_ref() == "src");
+    let has_src = el
+        .attrs
+        .iter()
+        .any(|(name, _)| name.local.as_ref() == "src");
     if has_src {
         return;
     }
@@ -516,7 +539,10 @@ fn promote_srcset(document: &mut Html, id: NodeId, options: &ConversionOptions) 
         let Node::Element(ref el) = *node.value() else {
             return;
         };
-        let has_src = el.attrs.iter().any(|(name, _)| name.local.as_ref() == "src");
+        let has_src = el
+            .attrs
+            .iter()
+            .any(|(name, _)| name.local.as_ref() == "src");
         let srcset = el
             .attrs
             .iter()
@@ -532,9 +558,12 @@ fn promote_srcset(document: &mut Html, id: NodeId, options: &ConversionOptions) 
     };
 
     let url = match options.cleanup.responsive_image_policy {
-        crate::options::ResponsiveImagePolicy::FirstSrcset | crate::options::ResponsiveImagePolicy::PreserveSrcset => {
-            srcset.split(',').next().and_then(|s| s.split_whitespace().next()).map(|s| s.to_string())
-        }
+        crate::options::ResponsiveImagePolicy::FirstSrcset
+        | crate::options::ResponsiveImagePolicy::PreserveSrcset => srcset
+            .split(',')
+            .next()
+            .and_then(|s| s.split_whitespace().next())
+            .map(|s| s.to_string()),
         crate::options::ResponsiveImagePolicy::Largest => {
             let candidates: Vec<&str> = srcset.split(',').map(|s| s.trim()).collect();
             choose_largest_srcset(&candidates)
@@ -564,7 +593,8 @@ fn choose_largest_srcset<'a>(candidates: &'a [&'a str]) -> &'a str {
                     if let Some(n) = d.strip_suffix('w') {
                         n.parse::<u32>().ok()
                     } else {
-                        d.strip_suffix('x').map(|n| (n.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32)
+                        d.strip_suffix('x')
+                            .map(|n| (n.parse::<f32>().unwrap_or(0.0) * 1000.0) as u32)
                     }
                 })
                 .unwrap_or(0)
@@ -581,8 +611,16 @@ fn append_image_metadata(document: &mut Html, id: NodeId) {
         let Node::Element(ref el) = *node.value() else {
             return;
         };
-        let w = el.attrs.iter().find(|(n, _)| n.local.as_ref() == "width").map(|(_, v)| v.to_string());
-        let h = el.attrs.iter().find(|(n, _)| n.local.as_ref() == "height").map(|(_, v)| v.to_string());
+        let w = el
+            .attrs
+            .iter()
+            .find(|(n, _)| n.local.as_ref() == "width")
+            .map(|(_, v)| v.to_string());
+        let h = el
+            .attrs
+            .iter()
+            .find(|(n, _)| n.local.as_ref() == "height")
+            .map(|(_, v)| v.to_string());
         (w, h)
     };
     if width.is_none() && height.is_none() {
@@ -871,11 +909,7 @@ fn apply_custom_rules(
     }
 
     let mut rules: Vec<_> = options.extension.custom_rules.iter().enumerate().collect();
-    rules.sort_by(|a, b| {
-        b.1.priority
-            .cmp(&a.1.priority)
-            .then_with(|| a.0.cmp(&b.0))
-    });
+    rules.sort_by(|a, b| b.1.priority.cmp(&a.1.priority).then_with(|| a.0.cmp(&b.0)));
 
     for (index, rule) in rules {
         for selector_str in &rule.selectors {
@@ -910,7 +944,7 @@ fn apply_custom_rules(
                     CustomRuleAction::Unwrap => unwrap_node(document, id),
                     CustomRuleAction::Text => replace_with_inner_text(document, id),
                     CustomRuleAction::Html => {}
-                        CustomRuleAction::MarkdownTemplate
+                    CustomRuleAction::MarkdownTemplate
                     | CustomRuleAction::FencedBlock
                     | CustomRuleAction::Link
                     | CustomRuleAction::Image => {
@@ -927,10 +961,7 @@ fn apply_custom_rules(
 }
 
 fn apply_table_handling(document: &mut Html, options: &ConversionOptions) {
-    let Ok(table_sel) = Selector::parse("table") else {
-        return;
-    };
-    let ids: Vec<NodeId> = document.select(&table_sel).map(|e| e.id()).collect();
+    let ids: Vec<NodeId> = document.select(&SEL_TABLE).map(|e| e.id()).collect();
 
     for id in ids {
         let is_complex = is_complex_table(document, id);
@@ -962,17 +993,14 @@ fn is_complex_table(document: &Html, id: NodeId) -> bool {
         return false;
     };
     // Nested tables are always complex.
-    if el.select(&Selector::parse("table table").unwrap()).next().is_some() {
+    if el.select(&SEL_NESTED_TABLE).next().is_some() {
         return true;
     }
 
     let mut row_lengths = Vec::new();
-    for row in el.select(&Selector::parse("tr").unwrap()) {
-        let cells = row.select(&Selector::parse("td, th").unwrap()).count();
-        let has_span = row
-            .select(&Selector::parse("[rowspan], [colspan]").unwrap())
-            .next()
-            .is_some();
+    for row in el.select(&SEL_TR) {
+        let cells = row.select(&SEL_CELLS).count();
+        let has_span = row.select(&SEL_SPAN_CELLS).next().is_some();
         if has_span {
             return true;
         }
@@ -993,9 +1021,9 @@ fn flatten_table(document: &mut Html, id: NodeId) {
         .and_then(scraper::ElementRef::wrap)
         .map(|el| {
             let mut lines = Vec::new();
-            for row in el.select(&Selector::parse("tr").unwrap()) {
+            for row in el.select(&SEL_TR) {
                 let cells: Vec<String> = row
-                    .select(&Selector::parse("td, th").unwrap())
+                    .select(&SEL_CELLS)
                     .map(|c| c.text().collect::<String>().trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();
@@ -1045,6 +1073,15 @@ fn apply_code_language_detection(document: &mut Html, options: &ConversionOption
         return;
     };
 
+    // User-configured patterns come from the process-wide cache, so their
+    // compile cost is paid once per process, not per element or conversion.
+    let patterns: Vec<regex::Regex> = options
+        .semantic
+        .code_language_patterns
+        .iter()
+        .filter_map(|p| crate::regex_cache::cached_regex(p))
+        .collect();
+
     let ids: Vec<NodeId> = document.select(&code_sel).map(|e| e.id()).collect();
     for id in ids {
         let pre_class = document
@@ -1064,13 +1101,8 @@ fn apply_code_language_detection(document: &mut Html, options: &ConversionOption
             .map(|(_, v)| v.to_string());
 
         let source = code_class.as_deref().unwrap_or("");
-        let mut lang = extract_language(source, &options.semantic.code_language_patterns)
-            .or_else(|| {
-                extract_language(
-                    pre_class.as_deref().unwrap_or(""),
-                    &options.semantic.code_language_patterns,
-                )
-            });
+        let mut lang = extract_language(source, &patterns)
+            .or_else(|| extract_language(pre_class.as_deref().unwrap_or(""), &patterns));
 
         if lang.is_none() && options.semantic.detect_languages {
             let text = code_text(document, id);
@@ -1104,13 +1136,34 @@ fn detect_language_from_code(text: &str) -> Option<&'static str> {
     static RULES: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
         vec![
             (Regex::new(r#"(?m)^\s*<\?php\b"#).unwrap(), "php"),
-            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+(?:python3?|python)\b"#).unwrap(), "python"),
-            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/python"#).unwrap(), "python"),
-            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+(?:node|nodejs)\b"#).unwrap(), "javascript"),
-            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+ruby\b"#).unwrap(), "ruby"),
-            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+perl\b"#).unwrap(), "perl"),
-            (Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+lua\b"#).unwrap(), "lua"),
-            (Regex::new(r#"(?m)^\s*#!\s*/bin/(?:bash|sh)\b"#).unwrap(), "shell"),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+(?:python3?|python)\b"#).unwrap(),
+                "python",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/usr/bin/python"#).unwrap(),
+                "python",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+(?:node|nodejs)\b"#).unwrap(),
+                "javascript",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+ruby\b"#).unwrap(),
+                "ruby",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+perl\b"#).unwrap(),
+                "perl",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/usr/bin/env\s+lua\b"#).unwrap(),
+                "lua",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#!\s*/bin/(?:bash|sh)\b"#).unwrap(),
+                "shell",
+            ),
             (Regex::new(r#"(?m)^\s*#!\s*/bin/zsh\b"#).unwrap(), "shell"),
             (Regex::new(r#"(?m)^\s*<!DOCTYPE\s+html\b"#).unwrap(), "html"),
             (Regex::new(r#"(?m)^\s*<\?xml\b"#).unwrap(), "xml"),
@@ -1118,14 +1171,29 @@ fn detect_language_from_code(text: &str) -> Option<&'static str> {
             (Regex::new(r#"(?m)^\s*package\s+main\s*$"#).unwrap(), "go"),
             (Regex::new(r#"(?m)^\s*func\s+\w+\s*\("#).unwrap(), "go"),
             (Regex::new(r#"(?m)^\s*fn\s+\w+\s*\("#).unwrap(), "rust"),
-            (Regex::new(r#"(?m)^\s*pub\s+fn\s+\w+\s*\("#).unwrap(), "rust"),
-            (Regex::new(r#"(?m)^\s*#include\s*[<\"][^>\"]*\.hpp[>\"]|std::"#).unwrap(), "cpp"),
+            (
+                Regex::new(r#"(?m)^\s*pub\s+fn\s+\w+\s*\("#).unwrap(),
+                "rust",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*#include\s*[<\"][^>\"]*\.hpp[>\"]|std::"#).unwrap(),
+                "cpp",
+            ),
             (Regex::new(r#"(?m)^\s*#include\s*[<\"]"#).unwrap(), "c"),
             (Regex::new(r#"(?m)^\s*def\s+\w+\s*\("#).unwrap(), "python"),
-            (Regex::new(r#"(?m)^\s*class\s+\w+\s*\{[^}]*System\.out"#).unwrap(), "java"),
-            (Regex::new(r#"(?m)^\s*console\.log\("#).unwrap(), "javascript"),
+            (
+                Regex::new(r#"(?m)^\s*class\s+\w+\s*\{[^}]*System\.out"#).unwrap(),
+                "java",
+            ),
+            (
+                Regex::new(r#"(?m)^\s*console\.log\("#).unwrap(),
+                "javascript",
+            ),
             (Regex::new(r#"(?m)^\s*document\."#).unwrap(), "javascript"),
-            (Regex::new(r#"(?m)^\s*SELECT\s+[\w*]+\s+FROM\s+\w+"#).unwrap(), "sql"),
+            (
+                Regex::new(r#"(?m)^\s*SELECT\s+[\w*]+\s+FROM\s+\w+"#).unwrap(),
+                "sql",
+            ),
             (Regex::new(r#"(?m)^\s*\$\("#).unwrap(), "shell"),
             (Regex::new(r#"(?m)^\s*echo\s+"#).unwrap(), "shell"),
             (Regex::new(r#"(?m)^\s*using\s+System"#).unwrap(), "cs"),

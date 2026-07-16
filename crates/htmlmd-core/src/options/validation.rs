@@ -14,9 +14,18 @@ pub fn validate(options: &ConversionOptions) -> Result<()> {
 
 fn validate_selectors(options: &ConversionOptions) -> Result<()> {
     let all: Vec<(String, &str)> = [
-        ("cleanup.remove-selectors", &options.cleanup.remove_selectors),
-        ("cleanup.unwrap-selectors", &options.cleanup.unwrap_selectors),
-        ("cleanup.keep-only-selectors", &options.cleanup.keep_only_selectors),
+        (
+            "cleanup.remove-selectors",
+            &options.cleanup.remove_selectors,
+        ),
+        (
+            "cleanup.unwrap-selectors",
+            &options.cleanup.unwrap_selectors,
+        ),
+        (
+            "cleanup.keep-only-selectors",
+            &options.cleanup.keep_only_selectors,
+        ),
     ]
     .into_iter()
     .flat_map(|(key, list)| list.iter().map(move |s| (key.to_string(), s.as_str())))
@@ -48,11 +57,8 @@ fn validate_selectors(options: &ConversionOptions) -> Result<()> {
 
 fn validate_base_url(options: &ConversionOptions) -> Result<()> {
     if let Some(base) = &options.cleanup.base_url {
-        url::Url::parse(base).map_err(|e| {
-            Error::Config(format!(
-                "invalid base-url '{base}': {e}"
-            ))
-        })?;
+        url::Url::parse(base)
+            .map_err(|e| Error::Config(format!("invalid base-url '{base}': {e}")))?;
     }
     Ok(())
 }

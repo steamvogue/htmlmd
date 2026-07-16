@@ -4,7 +4,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use htmlmd_core::{convert, ConversionOptions, ConversionResult};
+use htmlmd_core::{ConversionOptions, ConversionResult, convert};
 use sha2::{Digest, Sha256};
 
 use crate::cli::{Cli, OutputPolicyArg};
@@ -306,9 +306,8 @@ fn write_output(path: &Path, content: &str, atomic: bool) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     if atomic {
-        let mut tmp = tempfile::NamedTempFile::new_in(
-            path.parent().unwrap_or_else(|| Path::new(".")),
-        )?;
+        let mut tmp =
+            tempfile::NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?;
         tmp.write_all(content.as_bytes())?;
         tmp.persist(path).map_err(|e| CliError::Io(e.error))?;
     } else {

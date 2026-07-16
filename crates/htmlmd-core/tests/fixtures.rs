@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use htmlmd_core::{
-    convert, ConversionOptions,
+    ConversionOptions, convert,
     options::{
         CustomRule, CustomRuleAction, DetailsHandling, DifficultTableStrategy, FormHandling,
         ImageMode, LinkStyle, MediaPolicy, MermaidPolicy, ReferencePlacement, TableHandling,
@@ -26,42 +26,66 @@ fn expected(name: &str) -> String {
 
 #[test]
 fn basic_commonmark() {
-    assert_eq!(fixture("basic", &ConversionOptions::default()), expected("basic"));
+    assert_eq!(
+        fixture("basic", &ConversionOptions::default()),
+        expected("basic")
+    );
 }
 
 #[test]
 fn malformed_html() {
-    assert_eq!(fixture("malformed", &ConversionOptions::default()), expected("malformed"));
+    assert_eq!(
+        fixture("malformed", &ConversionOptions::default()),
+        expected("malformed")
+    );
 }
 
 #[test]
 fn gfm_table() {
-    assert_eq!(fixture("table", &ConversionOptions::gfm()), expected("table"));
+    assert_eq!(
+        fixture("table", &ConversionOptions::gfm()),
+        expected("table")
+    );
 }
 
 #[test]
 fn nested_lists() {
-    assert_eq!(fixture("nested_lists", &ConversionOptions::default()), expected("nested_lists"));
+    assert_eq!(
+        fixture("nested_lists", &ConversionOptions::default()),
+        expected("nested_lists")
+    );
 }
 
 #[test]
 fn lazy_images() {
-    assert_eq!(fixture("lazy_image", &ConversionOptions::default()), expected("lazy_image"));
+    assert_eq!(
+        fixture("lazy_image", &ConversionOptions::default()),
+        expected("lazy_image")
+    );
 }
 
 #[test]
 fn code_block() {
-    assert_eq!(fixture("code", &ConversionOptions::default()), expected("code"));
+    assert_eq!(
+        fixture("code", &ConversionOptions::default()),
+        expected("code")
+    );
 }
 
 #[test]
 fn links_cleanup() {
-    assert_eq!(fixture("links", &ConversionOptions::default()), expected("links"));
+    assert_eq!(
+        fixture("links", &ConversionOptions::default()),
+        expected("links")
+    );
 }
 
 #[test]
 fn hidden_content_removed() {
-    assert_eq!(fixture("hidden", &ConversionOptions::default()), expected("hidden"));
+    assert_eq!(
+        fixture("hidden", &ConversionOptions::default()),
+        expected("hidden")
+    );
 }
 
 #[test]
@@ -78,14 +102,21 @@ fn metadata_extraction() {
     assert_eq!(result.markdown, expected("metadata"));
     assert_eq!(result.title.as_deref(), Some("Page Title"));
     assert_eq!(result.description.as_deref(), Some("Page description"));
-    assert_eq!(result.canonical_url.as_deref(), Some("https://example.com/page"));
+    assert_eq!(
+        result.canonical_url.as_deref(),
+        Some("https://example.com/page")
+    );
 }
 
 #[test]
 fn determinism() {
     let html = fs::read_to_string(fixture_dir().join("basic.html")).unwrap();
-    let a = convert(&html, &ConversionOptions::default()).unwrap().markdown;
-    let b = convert(&html, &ConversionOptions::default()).unwrap().markdown;
+    let a = convert(&html, &ConversionOptions::default())
+        .unwrap()
+        .markdown;
+    let b = convert(&html, &ConversionOptions::default())
+        .unwrap()
+        .markdown;
     assert_eq!(a, b);
 }
 
@@ -187,7 +218,6 @@ fn media_placeholder() {
     eprintln!("MEDIA MD: {:?}", md);
     assert!(md.contains("(VIDEO: x.mp4)"));
 }
-
 
 #[test]
 fn extended_profile_semantic_features() {
@@ -339,9 +369,12 @@ fn obsidian_profile_wikilinks_and_frontmatter() {
 
 #[test]
 fn pandoc_profile_preserves_raw_html() {
-    let md = convert("<p>Press <kbd>Ctrl</kbd>.</p>", &ConversionOptions::pandoc())
-        .unwrap()
-        .markdown;
+    let md = convert(
+        "<p>Press <kbd>Ctrl</kbd>.</p>",
+        &ConversionOptions::pandoc(),
+    )
+    .unwrap()
+    .markdown;
     eprintln!("PANDOC MD:\n{md}");
     assert!(md.contains("<kbd>Ctrl</kbd>"));
 }
@@ -382,10 +415,11 @@ fn plain_text_profile_strips_markdown() {
 #[test]
 fn reference_links_adjacent() {
     let mut opts = ConversionOptions::default();
-        opts.render.link_style = LinkStyle::Reference;
-        opts.render.reference_placement = ReferencePlacement::Adjacent;
-        opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
-    let html = "<p><a href='https://a.com'>A</a> and <a href='https://b.com' title='B site'>B</a></p>";
+    opts.render.link_style = LinkStyle::Reference;
+    opts.render.reference_placement = ReferencePlacement::Adjacent;
+    opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
+    let html =
+        "<p><a href='https://a.com'>A</a> and <a href='https://b.com' title='B site'>B</a></p>";
     let md = convert(html, &opts).unwrap().markdown;
     eprintln!("REF ADJACENT MD:\n{md}");
     assert!(md.contains("[A][ref1]"));
@@ -397,10 +431,11 @@ fn reference_links_adjacent() {
 #[test]
 fn reference_links_section_end() {
     let mut opts = ConversionOptions::default();
-        opts.render.link_style = LinkStyle::Reference;
-        opts.render.reference_placement = ReferencePlacement::SectionEnd;
-        opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
-    let html = "<p><a href='https://a.com'>A</a></p><h2>Next</h2><p><a href='https://b.com'>B</a></p>";
+    opts.render.link_style = LinkStyle::Reference;
+    opts.render.reference_placement = ReferencePlacement::SectionEnd;
+    opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
+    let html =
+        "<p><a href='https://a.com'>A</a></p><h2>Next</h2><p><a href='https://b.com'>B</a></p>";
     let md = convert(html, &opts).unwrap().markdown;
     eprintln!("REF SECTION MD:\n{md}");
     assert!(md.contains("[A][ref1]"));
@@ -416,8 +451,8 @@ fn reference_links_section_end() {
 #[test]
 fn reference_images() {
     let mut opts = ConversionOptions::default();
-        opts.cleanup.image_mode = ImageMode::Reference;
-        opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
+    opts.cleanup.image_mode = ImageMode::Reference;
+    opts.render.title_attribute = htmlmd_core::options::TitleHandling::Inline;
     let html = "<p><img src='a.png' alt='A'><img src='b.png' alt='B' title='pic'></p>";
     let md = convert(html, &opts).unwrap().markdown;
     eprintln!("REF IMAGES MD:\n{md}");

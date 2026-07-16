@@ -7,6 +7,7 @@ pub mod error;
 pub mod htmd_backend;
 mod htmd_handlers;
 pub mod options;
+mod regex_cache;
 pub mod result;
 pub mod rewrite;
 
@@ -18,7 +19,7 @@ pub use htmd_backend::HtmdBackend;
 pub use options::ConversionOptions;
 pub use result::ConversionResult;
 
-pub use cleanup::{clean_html, ExtractedMetadata};
+pub use cleanup::{ExtractedMetadata, clean_html};
 use diagnostic::Diagnostic;
 
 /// Convert a UTF-8 HTML string to Markdown using the default backend.
@@ -78,7 +79,9 @@ pub fn convert_with_backend<B: ConverterBackend + ?Sized>(
     }
 
     if options.strict && result.has_errors() {
-        return Err(Error::Other("conversion produced errors in strict mode".to_string()));
+        return Err(Error::Other(
+            "conversion produced errors in strict mode".to_string(),
+        ));
     }
 
     Ok(result)
@@ -106,7 +109,6 @@ pub fn convert_with_backend_to_writer<B: ConverterBackend + ?Sized>(
     writer.write_all(result.markdown.as_bytes())?;
     Ok(())
 }
-
 
 fn apply_profile_post_processing(result: &mut ConversionResult, options: &ConversionOptions) {
     match options.profile {
@@ -148,35 +150,48 @@ fn escape_mdx(text: &str) -> String {
 }
 
 fn strip_markdown(text: &str) -> String {
+    use once_cell::sync::Lazy;
     use regex::Regex;
+
+    static HEADINGS: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^#{1,6}\s+").unwrap());
+    static BLOCKQUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^>\s?").unwrap());
+    static BULLETS: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^[-*+]\s+").unwrap());
+    static ORDERED: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\d+\.\s+").unwrap());
+    static FENCED_BACKTICK: Lazy<Regex> = Lazy::new(|| Regex::new(r"```[\s\S]*?```").unwrap());
+    static FENCED_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"~~~[\s\S]*?~~~").unwrap());
+    static INLINE_CODE: Lazy<Regex> = Lazy::new(|| Regex::new(r"`([^`]+)`").unwrap());
+    static IMAGES: Lazy<Regex> = Lazy::new(|| Regex::new(r"!\[([^\]]*)\]\([^)]*\)").unwrap());
+    static LINKS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[([^\]]+)\]\([^)]*\)").unwrap());
+    static HRULES: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^---+\s*$").unwrap());
+    static BLANK_LINES: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
 
     let mut s = text.to_string();
 
     // Headings: remove ATX markers.
-    s = Regex::new(r"(?m)^#{1,6}\s+").unwrap().replace_all(&s, "").to_string();
+    s = HEADINGS.replace_all(&s, "").to_string();
     // Blockquote markers.
-    s = Regex::new(r"(?m)^>\s?").unwrap().replace_all(&s, "").to_string();
+    s = BLOCKQUOTES.replace_all(&s, "").to_string();
     // List bullets / ordered markers.
-    s = Regex::new(r"(?m)^[-*+]\s+").unwrap().replace_all(&s, "").to_string();
-    s = Regex::new(r"(?m)^\d+\.\s+").unwrap().replace_all(&s, "").to_string();
+    s = BULLETS.replace_all(&s, "").to_string();
+    s = ORDERED.replace_all(&s, "").to_string();
     // Fenced code blocks.
-    s = Regex::new(r"```[\s\S]*?```").unwrap().replace_all(&s, "").to_string();
-    s = Regex::new(r"~~~[\s\S]*?~~~").unwrap().replace_all(&s, "").to_string();
+    s = FENCED_BACKTICK.replace_all(&s, "").to_string();
+    s = FENCED_TILDE.replace_all(&s, "").to_string();
     // Inline code.
-    s = Regex::new(r"`([^`]+)`").unwrap().replace_all(&s, "$1").to_string();
+    s = INLINE_CODE.replace_all(&s, "$1").to_string();
     // Images -> alt text.
-    s = Regex::new(r"!\[([^\]]*)\]\([^)]*\)").unwrap().replace_all(&s, "$1").to_string();
+    s = IMAGES.replace_all(&s, "$1").to_string();
     // Links -> link text.
-    s = Regex::new(r"\[([^\]]+)\]\([^)]*\)").unwrap().replace_all(&s, "$1").to_string();
+    s = LINKS.replace_all(&s, "$1").to_string();
     // Emphasis / highlight / insert / strike / sub / sup markers.
     for marker in ["**", "__", "*", "_", "~~", "==", "++", "^", "~"] {
         s = s.replace(marker, "");
     }
     // Horizontal rules.
-    s = Regex::new(r"(?m)^---+\s*$").unwrap().replace_all(&s, "").to_string();
+    s = HRULES.replace_all(&s, "").to_string();
 
     // Collapse multiple blank lines.
-    Regex::new(r"\n{3,}").unwrap().replace_all(s.trim(), "\n\n").to_string()
+    BLANK_LINES.replace_all(s.trim(), "\n\n").to_string()
 }
 
 #[cfg(test)]

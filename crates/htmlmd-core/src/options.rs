@@ -585,7 +585,6 @@ pub struct Limits {
     pub max_attribute_len: u64,
 }
 
-
 /// Math detection and output options.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -751,10 +750,7 @@ impl Default for CleanupOptions {
                 "data".to_string(),
                 "file".to_string(),
             ],
-            lazy_image_attrs: vec![
-                "data-src".to_string(),
-                "data-original".to_string(),
-            ],
+            lazy_image_attrs: vec!["data-src".to_string(), "data-original".to_string()],
             responsive_image_policy: ResponsiveImagePolicy::FirstSrcset,
             preserve_image_metadata: false,
             image_mode: ImageMode::Inline,

@@ -22,8 +22,9 @@ name = "htmlmd"
 path = "src/main.rs"
 
 [features]
-default = ["parallel"]
+default = ["parallel", "mimalloc"]
 parallel = ["htmlmd-core/parallel", "rayon"]
+mimalloc = ["dep:mimalloc"]
 
 [dependencies]
 htmlmd-core = { workspace = true }
@@ -45,6 +46,7 @@ encoding_rs = { workspace = true }
 filetime = { workspace = true }
 tempfile = { workspace = true }
 rayon = { workspace = true, optional = true }
+mimalloc = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

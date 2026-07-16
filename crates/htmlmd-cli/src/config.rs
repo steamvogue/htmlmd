@@ -35,10 +35,13 @@ pub fn load_config(cli: &Cli) -> Result<ConversionOptions> {
     figment = figment.merge(Env::prefixed("HTMLMD_").split("__"));
 
     // Highest: explicit CLI flags.
-    let mut opts: ConversionOptions = figment.extract().map_err(|e| CliError::Config(e.to_string()))?;
+    let mut opts: ConversionOptions = figment
+        .extract()
+        .map_err(|e| CliError::Config(e.to_string()))?;
     apply_cli_overrides(&mut opts, cli);
     opts.apply_profile_defaults();
-    opts.validate().map_err(|e| CliError::Config(e.to_string()))?;
+    opts.validate()
+        .map_err(|e| CliError::Config(e.to_string()))?;
     Ok(opts)
 }
 

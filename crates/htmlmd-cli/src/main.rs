@@ -15,8 +15,12 @@ mod mappings;
 
 use cli::Cli;
 use config::load_config;
-use convert::{assign_output_paths, execute_job, read_jobs, write_manifest, JobRecord};
+use convert::{JobRecord, assign_output_paths, execute_job, read_jobs, write_manifest};
 use error::{CliError, Result};
+
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
     if let Err(e) = run() {

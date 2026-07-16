@@ -33,7 +33,12 @@ pub fn build_converter(options: &ConversionOptions) -> HtmlToMarkdown {
         .options(htmd_options)
         .scripting_enabled(scripting_enabled);
 
-    let skip_tags: Vec<&str> = options.cleanup.remove_tags.iter().map(|s| s.as_str()).collect();
+    let skip_tags: Vec<&str> = options
+        .cleanup
+        .remove_tags
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
     if !skip_tags.is_empty() {
         builder = builder.skip_tags(skip_tags);
     }
@@ -392,9 +397,10 @@ fn add_math_handlers(
         if faithful_with_attrs(h, &e) {
             return h.fallback(e);
         }
-        let block = e.attrs.iter().any(|a| {
-            a.name.local.as_ref() == "display" && a.value.eq_ignore_ascii_case("block")
-        });
+        let block = e
+            .attrs
+            .iter()
+            .any(|a| a.name.local.as_ref() == "display" && a.value.eq_ignore_ascii_case("block"));
         let text = mathml_text(e.node);
         Some(math_output(&text, block, output).into())
     });
@@ -704,7 +710,13 @@ fn alert_handler(handlers: &dyn Handlers, element: Element<'_>) -> Option<Handle
 
     let quoted = body
         .lines()
-        .map(|line| if line.is_empty() { ">".to_string() } else { format!("> {line}") })
+        .map(|line| {
+            if line.is_empty() {
+                ">".to_string()
+            } else {
+                format!("> {line}")
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     Some(format!("\n\n> [!{alert_type}]\n{quoted}\n\n").into())
@@ -740,8 +752,7 @@ fn add_wikilink_handlers(
 
 fn wikilink_handler(h: &dyn Handlers, e: Element<'_>) -> Option<HandlerResult> {
     let is_wikilink = e.attrs.iter().any(|a| {
-        (a.name.local.as_ref() == "class"
-            && a.value.split_whitespace().any(|c| c == "wikilink"))
+        (a.name.local.as_ref() == "class" && a.value.split_whitespace().any(|c| c == "wikilink"))
             || (a.name.local.as_ref() == "rel" && a.value.as_ref() == "wikilink")
     });
     if !is_wikilink {
@@ -799,8 +810,18 @@ struct ReferenceState {
     counter: usize,
 }
 
+/// Lock the shared reference state, recovering from poisoning so a panic in
+/// one conversion can never wedge later conversions in library code.
+fn lock_reference_state(
+    state: &Mutex<ReferenceState>,
+) -> std::sync::MutexGuard<'_, ReferenceState> {
+    state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn next_reference_id(state: &Mutex<ReferenceState>) -> usize {
-    let mut st = state.lock().unwrap();
+    let mut st = lock_reference_state(state);
     st.counter += 1;
     st.counter
 }
@@ -890,11 +911,9 @@ impl htmd::element_handler::ElementHandler for ReferenceLinkHandler {
 
         let inline = format!("[{text}][{id}]");
         match self.placement {
-            ReferencePlacement::Adjacent => {
-                Some(format!("{inline}\n\n{definition}\n\n").into())
-            }
+            ReferencePlacement::Adjacent => Some(format!("{inline}\n\n{definition}\n\n").into()),
             ReferencePlacement::SectionEnd | ReferencePlacement::End => {
-                self.state.lock().unwrap().pending.push(definition);
+                lock_reference_state(&self.state).pending.push(definition);
                 Some(inline.into())
             }
         }
@@ -905,7 +924,7 @@ impl htmd::element_handler::ElementHandler for ReferenceLinkHandler {
             return None;
         }
         let defs = {
-            let mut st = self.state.lock().unwrap();
+            let mut st = lock_reference_state(&self.state);
             std::mem::take(&mut st.pending)
         };
         if defs.is_empty() {
@@ -948,11 +967,9 @@ impl htmd::element_handler::ElementHandler for ReferenceImageHandler {
 
         let inline = format!("![{alt}][{id}]");
         match self.placement {
-            ReferencePlacement::Adjacent => {
-                Some(format!("{inline}\n\n{definition}\n\n").into())
-            }
+            ReferencePlacement::Adjacent => Some(format!("{inline}\n\n{definition}\n\n").into()),
             ReferencePlacement::SectionEnd | ReferencePlacement::End => {
-                self.state.lock().unwrap().pending.push(definition);
+                lock_reference_state(&self.state).pending.push(definition);
                 Some(inline.into())
             }
         }
@@ -963,7 +980,7 @@ impl htmd::element_handler::ElementHandler for ReferenceImageHandler {
             return None;
         }
         let defs = {
-            let mut st = self.state.lock().unwrap();
+            let mut st = lock_reference_state(&self.state);
             std::mem::take(&mut st.pending)
         };
         if defs.is_empty() {
@@ -981,12 +998,13 @@ struct HeadingFlushHandler {
 
 impl htmd::element_handler::ElementHandler for HeadingFlushHandler {
     fn handle(&self, handlers: &dyn Handlers, element: Element<'_>) -> Option<HandlerResult> {
-        if handlers.options().translation_mode == TranslationMode::Faithful && !element.attrs.is_empty()
+        if handlers.options().translation_mode == TranslationMode::Faithful
+            && !element.attrs.is_empty()
         {
             return handlers.fallback(element);
         }
         let defs = {
-            let mut st = self.state.lock().unwrap();
+            let mut st = lock_reference_state(&self.state);
             std::mem::take(&mut st.pending)
         };
         let heading = handlers.fallback(element)?.content;
@@ -1047,25 +1065,33 @@ impl htmd::element_handler::ElementHandler for CustomRuleHandler {
         match self.rule.action {
             CustomRuleAction::MarkdownTemplate => {
                 let template = self.rule.template.as_deref()?;
-                let text = handlers.walk_children(element.node).content.trim().to_string();
+                let text = handlers
+                    .walk_children(element.node)
+                    .content
+                    .trim()
+                    .to_string();
+                static ATTR_RE: once_cell::sync::Lazy<regex::Regex> =
+                    once_cell::sync::Lazy::new(|| regex::Regex::new(r"\{attr:(\w+)\}").unwrap());
                 let mut result = template.replace("{text}", &text);
-                if let Ok(attr_re) = regex::Regex::new(r"\{attr:(\w+)\}") {
-                    for caps in attr_re.captures_iter(template) {
-                        let placeholder = &caps[0];
-                        let attr_name = &caps[1];
-                        let value = element
-                            .attrs
-                            .iter()
-                            .find(|a| a.name.local.as_ref() == attr_name)
-                            .map(|a| a.value.to_string())
-                            .unwrap_or_default();
-                        result = result.replace(placeholder, &value);
-                    }
+                for caps in ATTR_RE.captures_iter(template) {
+                    let placeholder = &caps[0];
+                    let attr_name = &caps[1];
+                    let value = element
+                        .attrs
+                        .iter()
+                        .find(|a| a.name.local.as_ref() == attr_name)
+                        .map(|a| a.value.to_string())
+                        .unwrap_or_default();
+                    result = result.replace(placeholder, &value);
                 }
                 Some(result.into())
             }
             CustomRuleAction::FencedBlock => {
-                let text = handlers.walk_children(element.node).content.trim().to_string();
+                let text = handlers
+                    .walk_children(element.node)
+                    .content
+                    .trim()
+                    .to_string();
                 if text.is_empty() {
                     return Some("".into());
                 }
@@ -1080,7 +1106,11 @@ impl htmd::element_handler::ElementHandler for CustomRuleHandler {
                     .find(|a| a.name.local.as_ref() == "href")
                     .map(|a| a.value.to_string())
                     .unwrap_or_default();
-                let text = handlers.walk_children(element.node).content.trim().to_string();
+                let text = handlers
+                    .walk_children(element.node)
+                    .content
+                    .trim()
+                    .to_string();
                 let dest = if href.is_empty() { text.clone() } else { href };
                 let label = text.replace(']', "\\]");
                 let dest = dest.replace('(', "\\(").replace(')', "\\)");
@@ -1099,7 +1129,11 @@ impl htmd::element_handler::ElementHandler for CustomRuleHandler {
                     .find(|a| a.name.local.as_ref() == "alt")
                     .map(|a| a.value.to_string())
                     .unwrap_or_else(|| {
-                        handlers.walk_children(element.node).content.trim().to_string()
+                        handlers
+                            .walk_children(element.node)
+                            .content
+                            .trim()
+                            .to_string()
                     });
                 if src.is_empty() {
                     return Some("".into());

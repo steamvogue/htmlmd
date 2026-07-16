@@ -7,7 +7,7 @@ version = "0.1.0"
 authors = ["htmlmd contributors"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/example/htmlmd"
+repository = "https://github.com/steamvogue/htmlmd"
 rust-version = "1.85"
 
 [workspace.dependencies]
@@ -49,9 +49,17 @@ filetime = "0.2"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 
+# Allocator (optional, default-on for the binaries)
+mimalloc = "0.1"
+
 # Dev dependencies
 insta = { version = "1.42", features = ["json", "redactions"] }
 tempfile = "3.14"
 assert_cmd = "2.0"
 predicates = "3.1"
 criterion = { version = "0.5", features = ["html_reports"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
