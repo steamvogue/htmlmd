@@ -75,7 +75,10 @@ $Node    = Join-Path $Tools 'node\node.exe'
 $Venv    = Join-Path $Tools 'venv\Scripts\python.exe'
 $H2m     = Join-Path $Tools 'html2markdown.exe'
 $Pandoc  = Join-Path $Tools 'pandoc.exe'
-$Adapters = Join-Path $Root '..\adapters'
+# Repo layout keeps the adapters one level up; the standalone
+# kit ships them alongside this script.
+$Adapters = Join-Path $Root 'adapters'
+if (-not (Test-Path $Adapters)) { $Adapters = Join-Path $Root '..\adapters' }
 
 Write-Host ""
 Write-Host "htmlmd:  $Htmlmd" -ForegroundColor White
