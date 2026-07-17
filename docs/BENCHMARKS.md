@@ -50,35 +50,38 @@ within this table only.
 Windows 11, x86_64 (CPU: _TBD_), quiet machine, 2026-07-17. hyperfine 1.20.0,
 mean ± σ; parenthesised figure is slowdown relative to htmlmd.
 
-**The binary under test is the `x86_64-pc-windows-gnu` cross-build** (produced
-on the aarch64 dev box via mingw), not the `x86_64-pc-windows-msvc` binary that
-GitHub Releases ship. Same source and same default features — mimalloc
-included — but a different ABI and a different C runtime, so these timings are
-not a measurement of the released artifact. Treat the tool-vs-tool ratios as
-the result and the absolute milliseconds as ABI-specific.
+**The htmlmd under test is the `x86_64-pc-windows-msvc` build with a static
+CRT (`+crt-static`) — byte-for-byte the configuration GitHub Releases ship.**
+The same run also timed the mingw `windows-gnu` cross-build as its own row
+(`run.ps1 -CompareBuilds`), which settles a caveat an earlier draft of this
+section had to carry: the ABI gap is ~3–4% in msvc's favour on `wiki` by
+median and min, and statistically indistinguishable on the three smaller
+corpora, where the ratio straddles 1.0. Either ABI's numbers would have been
+honest; these are the shipping one's.
 
 | tool | wiki (1.0 MB) | news (217 KB) | docs (245 KB) | tables (211 KB) |
 |---|---|---|---|---|
-| **htmlmd** 0.1.0 | **34±5 ms** | **19±4 ms** | **24±6 ms** | **24±6 ms** |
-| [html-to-markdown v2] (Go) 2.5.2 | 62±3 ms (1.8×) | 20±3 ms (1.0×) | **19±6 ms (0.8×)** | 28±5 ms (1.2×) |
-| [turndown] (Node) 7.2 + gfm | 690±3 ms (20.4×) | 160±4 ms (8.4×) | 207±4 ms (8.6×) | 144±9 ms (6.1×) |
-| [markdownify] (Python) 1.2 | 575±10 ms (17.0×) | 175±7 ms (9.2×) | 165±4 ms (6.8×) | 382±7 ms (16.2×) |
-| [pandoc] 3.10 | 1284±13 ms (38.0×) | 282±7 ms (14.8×) | 243±5 ms (10.0×) | 393±5 ms (16.7×) |
+| **htmlmd** 0.1.0 (msvc, static CRT) | **29±3 ms** | **18±5 ms** | **20±4 ms** | **22±4 ms** |
+| htmlmd 0.1.0 (gnu cross-build) | 31±6 ms (1.1×) | 18±6 ms (1.0×) | 20±3 ms (1.0×) | 21±3 ms (1.0×) |
+| [html-to-markdown v2] (Go) 2.5.2 | 60±6 ms (2.1×) | 20±5 ms (1.1×) | **15±5 ms (0.8×)** | 28±6 ms (1.3×) |
+| [turndown] (Node) 7.2 + gfm | 632±5 ms (21.9×) | 152±4 ms (8.6×) | 197±5 ms (9.8×) | 133±4 ms (6.2×) |
+| [markdownify] (Python) 1.2 | 550±8 ms (19.1×) | 167±4 ms (9.4×) | 161±9 ms (8.0×) | 369±4 ms (17.1×) |
+| [pandoc] 3.10 | 1205±8 ms (41.7×) | 274±2 ms (15.5×) | 227±4 ms (11.3×) | 371±6 ms (17.2×) |
 
 **Reading these honestly — most of this table is at the measurement floor.**
 Only `wiki` (1.0 MB) is large enough that conversion work dominates process
 startup; the other three corpora are 211–245 KB and every fast tool lands
 near 20 ms regardless of what it does. The tell is in the dispersion: the
-interpreted tools have a coefficient of variation of 0.4–6%, while htmlmd
-and html-to-markdown sit at 13–31% with maxima 2–2.4× their own medians.
-That spread is Windows process-spawn jitter, not workload variance — a
-noisy machine would have hit pandoc's 1.3 s run hardest, and it did not
-touch it at all. hyperfine's "re-run on a quiet PC" warning fires on this
-data for that reason and should not be read as a machine problem.
+interpreted tools have a coefficient of variation of 1–6%, while htmlmd
+and html-to-markdown sit at 9–32%. That spread is Windows process-spawn
+jitter, not workload variance — a noisy machine would have hit pandoc's
+1.2 s run hardest, and it did not touch it at all. hyperfine's "re-run on
+a quiet PC" warning fires on this data for that reason and should not be
+read as a machine problem.
 
-So: the 6–38× gaps over turndown, markdownify and pandoc are real and far
+So: the 6–42× gaps over turndown, markdownify and pandoc are real and far
 exceed the floor. The htmlmd-vs-html-to-markdown comparison is only
-trustworthy on `wiki` (1.9× our favour, and mean/median/min all agree). On
+trustworthy on `wiki` (2.1× our favour, and mean/median/min all agree). On
 the three small corpora, treat it as a tie.
 
 The `docs` result reproduces the Pi finding exactly — v2 is ~25% faster
