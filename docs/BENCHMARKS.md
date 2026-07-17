@@ -48,7 +48,14 @@ within this table only.
 
 <!-- TODO: fill in CPU model before publishing -->
 Windows 11, x86_64 (CPU: _TBD_), quiet machine, 2026-07-17. hyperfine 1.20.0,
-mean ± σ; parenthesised figure is slowdown relative to htmlmd:
+mean ± σ; parenthesised figure is slowdown relative to htmlmd.
+
+**The binary under test is the `x86_64-pc-windows-gnu` cross-build** (produced
+on the aarch64 dev box via mingw), not the `x86_64-pc-windows-msvc` binary that
+GitHub Releases ship. Same source and same default features — mimalloc
+included — but a different ABI and a different C runtime, so these timings are
+not a measurement of the released artifact. Treat the tool-vs-tool ratios as
+the result and the absolute milliseconds as ABI-specific.
 
 | tool | wiki (1.0 MB) | news (217 KB) | docs (245 KB) | tables (211 KB) |
 |---|---|---|---|---|
