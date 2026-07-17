@@ -46,9 +46,22 @@ and the run simply omits that row.
 
 ## Getting the binaries
 
-Either take them from a tagged GitHub release (`x86_64-pc-windows-msvc`,
-built natively by the release workflow), or cross-compile the GNU target
-from a Linux host — including an ARM64 one:
+**Best option: build on the Windows box itself, if Rust is installed there.**
+A stock `rustup` toolchain is `x86_64-pc-windows-msvc` — the same ABI the
+release workflow ships — so the benchmark measures the artifact people
+actually download. From the repo root:
+
+```powershell
+cargo build --release
+cargo build --release -p htmlmd-core --example dump_corpus
+```
+
+`run.ps1` finds both under `target\release\` on its own; nothing to copy.
+Confirm with the `htmlmd:` path it prints at startup.
+
+Otherwise, take them from a tagged GitHub release (also
+`x86_64-pc-windows-msvc`), or cross-compile the GNU target from a Linux host —
+including an ARM64 one:
 
 ```bash
 rustup target add x86_64-pc-windows-gnu
@@ -58,6 +71,9 @@ cargo build --release --target x86_64-pc-windows-gnu -p htmlmd-core --example du
 ```
 
 The linker is already configured in [`.cargo/config.toml`](../../../.cargo/config.toml).
+The cross-build is `windows-gnu`, a different ABI and C runtime from the
+shipped `windows-msvc` binary — fine for tool-vs-tool ratios, but say which
+one produced any number you publish.
 
 ## Reading the results
 

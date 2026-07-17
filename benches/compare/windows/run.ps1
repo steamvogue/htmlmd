@@ -10,8 +10,9 @@
     CLI invocation (process and interpreter startup included). Tools that are
     not installed are skipped with a note rather than failing the run.
 
-    Requires: setup.ps1 to have been run, htmlmd.exe and dump_corpus.exe in
-    this folder (or in ..\..\..\dist\x86_64-pc-windows-gnu\).
+    Requires: setup.ps1 to have been run, plus htmlmd.exe and dump_corpus.exe.
+    Those are picked up from a native 'cargo build --release' automatically;
+    failing that, from dist\<triple>\ or from this folder.
 
 .PARAMETER OutputProfile
     htmlmd output profile to benchmark. Default: gfm. (Not named -Profile:
@@ -36,10 +37,30 @@ $Root    = $PSScriptRoot
 $Tools   = Join-Path $Root 'tools'
 $Corpus  = Join-Path $Root 'corpus'
 $Results = Join-Path $Root 'results'
+$RepoRoot = Join-Path $Root '..\..\..'
 
 function Find-Exe {
+    <#
+       An exe dropped next to this script wins, so an explicit choice always
+       beats a guess. Otherwise prefer a native `cargo build --release`: on a
+       stock Windows toolchain that is the msvc ABI the release workflow ships,
+       whereas dist\ is usually the mingw cross-build from a Linux host, and
+       the two do not have to perform alike. Searching target\ ahead of a
+       hand-copied dist\ also stops a stale exe being benchmarked in silence.
+       Cargo puts examples (dump_corpus) in their own subdirectory.
+
+       run.ps1 prints whichever path wins -- worth a glance before publishing,
+       since the directory is the only thing identifying the ABI.
+    #>
     param([string] $Name)
-    foreach ($dir in @($Root, (Join-Path $Root '..\..\..\dist\x86_64-pc-windows-gnu'))) {
+    $dirs = @(
+        $Root
+        (Join-Path $RepoRoot 'target\release')
+        (Join-Path $RepoRoot 'target\release\examples')
+        (Join-Path $RepoRoot 'dist\x86_64-pc-windows-msvc')
+        (Join-Path $RepoRoot 'dist\x86_64-pc-windows-gnu')
+    )
+    foreach ($dir in $dirs) {
         $p = Join-Path $dir $Name
         if (Test-Path $p) { return (Resolve-Path $p).Path }
     }
@@ -53,7 +74,8 @@ if (-not (Test-Path $Hyperfine)) {
 
 $Htmlmd = Find-Exe 'htmlmd.exe'
 if (-not $Htmlmd) {
-    throw "htmlmd.exe not found. Copy it next to this script (or into dist\x86_64-pc-windows-gnu\)."
+    throw ("htmlmd.exe not found. Build it with 'cargo build --release' at the " +
+           "repo root, or copy an exe next to this script.")
 }
 
 # --- corpus ----------------------------------------------------------------
