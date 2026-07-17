@@ -75,6 +75,33 @@ The cross-build is `windows-gnu`, a different ABI and C runtime from the
 shipped `windows-msvc` binary — fine for tool-vs-tool ratios, but say which
 one produced any number you publish.
 
+## Comparing the two ABIs
+
+`windows-msvc` links the UCRT via `VCRUNTIME140.dll`; the mingw `windows-gnu`
+cross-build links `msvcrt.dll`. Different C runtime, different allocator
+plumbing, so they need not perform alike — and only the msvc one ships. To
+measure the gap instead of guessing at it, put both under `dist\<triple>\`
+and pass `-CompareBuilds`:
+
+```powershell
+mkdir dist\x86_64-pc-windows-msvc
+copy target\release\htmlmd.exe        dist\x86_64-pc-windows-msvc\
+copy target\release\htmlmd-server.exe dist\x86_64-pc-windows-msvc\
+
+cd benches\compare\windows
+powershell -ExecutionPolicy Bypass -File run.ps1 -CompareBuilds
+```
+
+Each build becomes its own row (`htmlmd-msvc`, `htmlmd-gnu`) in the same
+hyperfine run, against the same corpus on the same machine, with only the
+binary differing — the one arrangement where an msvc-vs-gnu number is worth
+anything. Ratios are quoted against the first row, `htmlmd-msvc`. A build that
+isn't there is reported and skipped.
+
+Bear in mind the three small corpora sit at the Windows process-spawn floor
+(see [`docs/BENCHMARKS.md`](../../../docs/BENCHMARKS.md)), so an ABI
+difference will only be legible on `wiki`.
+
 ## Reading the results
 
 **Windows numbers are not comparable to the Linux numbers in

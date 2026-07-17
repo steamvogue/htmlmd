@@ -18,12 +18,22 @@
     htmlmd output profile to benchmark. Default: gfm. (Not named -Profile:
     $Profile is a PowerShell automatic variable.)
 
+.PARAMETER CompareBuilds
+    Benchmark every htmlmd build found under dist\<triple>\ as its own row
+    instead of picking one. Use this to measure the msvc build (what releases
+    ship) against the windows-gnu cross-build on one machine, where the
+    comparison is fair because only the binary differs.
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File run.ps1
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File run.ps1 -CompareBuilds
 #>
 
 param(
-    [string] $OutputProfile = 'gfm'
+    [string] $OutputProfile = 'gfm',
+    [switch] $CompareBuilds
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,6 +88,28 @@ if (-not $Htmlmd) {
            "repo root, or copy an exe next to this script.")
 }
 
+# --- htmlmd builds under test ----------------------------------------------
+# One row normally. With -CompareBuilds, each dist\<triple>\ build gets its own
+# row: same machine, same corpus, same harness, only the binary differs, which
+# is the one setup where an msvc-vs-gnu number means anything. The first entry
+# is the baseline every ratio is quoted against.
+$Builds = [ordered]@{}
+if ($CompareBuilds) {
+    foreach ($abi in @(
+        @{ Name = 'htmlmd-msvc'; Dir = 'dist\x86_64-pc-windows-msvc' },
+        @{ Name = 'htmlmd-gnu';  Dir = 'dist\x86_64-pc-windows-gnu'  }
+    )) {
+        $p = Join-Path $RepoRoot (Join-Path $abi.Dir 'htmlmd.exe')
+        if (Test-Path $p) { $Builds[$abi.Name] = (Resolve-Path $p).Path }
+        else { Write-Warning "$($abi.Name) skipped ($($abi.Dir)\htmlmd.exe not found)" }
+    }
+    if ($Builds.Count -lt 2) {
+        Write-Warning ("-CompareBuilds found $($Builds.Count) build(s); a comparison " +
+                       "needs both. Populate dist\<triple>\ via scripts/build-release.sh.")
+    }
+}
+if ($Builds.Count -eq 0) { $Builds['htmlmd'] = $Htmlmd }
+
 # --- corpus ----------------------------------------------------------------
 $DumpCorpus = Find-Exe 'dump_corpus.exe'
 if (Test-Path $Corpus) {
@@ -110,8 +142,10 @@ if (-not (Test-Path $Adapters)) {
 }
 
 Write-Host ""
-Write-Host "htmlmd:  $Htmlmd" -ForegroundColor White
-Write-Host "profile: $OutputProfile" -ForegroundColor White
+foreach ($name in $Builds.Keys) {
+    Write-Host ("{0,-13} {1}" -f "${name}:", $Builds[$name]) -ForegroundColor White
+}
+Write-Host ("{0,-13} {1}" -f 'profile:', $OutputProfile) -ForegroundColor White
 Write-Host ""
 
 foreach ($doc in @('wiki', 'news', 'docs', 'tables')) {
@@ -121,7 +155,11 @@ foreach ($doc in @('wiki', 'news', 'docs', 'tables')) {
         continue
     }
 
-    $cmds = @('--command-name', 'htmlmd', "`"$Htmlmd`" --profile $OutputProfile `"$inputPath`"")
+    $cmds = @()
+    foreach ($name in $Builds.Keys) {
+        $cmds += @('--command-name', $name,
+                   "`"$($Builds[$name])`" --profile $OutputProfile `"$inputPath`"")
+    }
 
     if ((Test-Path $Node) -and (Test-Path (Join-Path $NodeRoot 'node_modules\turndown'))) {
         $script = Join-Path $Adapters 'turndown.js'
@@ -180,10 +218,15 @@ foreach ($doc in $docs) {
     }
 }
 
+# hyperfine preserves command order, so the first row is the first build we
+# passed -- 'htmlmd', or 'htmlmd-msvc' under -CompareBuilds. Deriving the
+# baseline rather than hardcoding a name keeps the ratio column meaningful
+# whatever the builds are called.
+$baselineName = $tools[0]
 $baseline = @{}
 foreach ($doc in $docs) {
-    if ($rows.ContainsKey('htmlmd') -and $rows['htmlmd'].ContainsKey($doc)) {
-        $baseline[$doc] = $rows['htmlmd'][$doc].mean
+    if ($rows[$baselineName].ContainsKey($doc)) {
+        $baseline[$doc] = $rows[$baselineName][$doc].mean
     }
 }
 
@@ -199,7 +242,7 @@ foreach ($tool in $tools) {
             $m = $rows[$tool][$doc].mean * 1000
             $s = $rows[$tool][$doc].stddev * 1000
             $rel = ''
-            if ($tool -ne 'htmlmd' -and $baseline.ContainsKey($doc) -and $baseline[$doc] -gt 0) {
+            if ($tool -ne $baselineName -and $baseline.ContainsKey($doc) -and $baseline[$doc] -gt 0) {
                 $rel = [string]::Format($inv, ' ({0:F1}x)',
                                         ($rows[$tool][$doc].mean / $baseline[$doc]))
             }
@@ -211,5 +254,6 @@ foreach ($tool in $tools) {
 
 Write-Host ""
 Write-Host "Raw JSON in $Results" -ForegroundColor DarkGray
+Write-Host "Ratios are relative to '$baselineName'." -ForegroundColor DarkGray
 Write-Host "Windows numbers are NOT comparable to the Linux numbers in docs/BENCHMARKS.md;" -ForegroundColor Yellow
-Write-Host "publish them under their own machine heading." -ForegroundColor Yellow
+Write-Host "publish them under their own machine heading, and say which ABI built the exe." -ForegroundColor Yellow
