@@ -1,6 +1,11 @@
 [graph]
+# Every platform a release archive is built for (see release.yml), so deny
+# vets the dependency tree we actually ship, not just the dev machines.
 targets = [
     { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-unknown-linux-musl" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-musl" },
     { triple = "x86_64-apple-darwin" },
     { triple = "aarch64-apple-darwin" },
     { triple = "x86_64-pc-windows-msvc" },
@@ -16,5 +21,13 @@ allow = [
     "BSD-3-Clause",
     "ISC",
     "Unicode-DFS-2016",
+    # ICU4X (pulled in by url/idna) relicensed to Unicode-3.0; permissive.
+    "Unicode-3.0",
+    # foldhash; permissive.
+    "Zlib",
+    # cssparser/selectors, the Servo CSS stack under scraper. Weak file-level
+    # copyleft: changes to those files must stay MPL, which crates.io
+    # publication satisfies; it does not reach our MIT/Apache code.
+    "MPL-2.0",
 ]
 confidence-threshold = 0.8
