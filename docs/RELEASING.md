@@ -21,8 +21,10 @@ cargo test --workspace
 
 ## 2. Update the changelog
 
-`CHANGELOG.md` does not exist yet (planned in ROADMAP M5). Once it does,
-add the release section here before tagging.
+`CHANGELOG.md` keeps an `## [Unreleased]` section. Before tagging, retitle it
+`## [X.Y.Z] - YYYY-MM-DD` and open a fresh empty `## [Unreleased]` above it.
+The tag and the changelog heading must agree — the release notes are
+generated from commits, so the changelog is the only curated record.
 
 ## 3. Tag and push
 
@@ -39,8 +41,15 @@ which creates a GitHub Release (with generated notes) containing, per target:
 - `htmlmd-vX.Y.Z-<triple>.tar.gz` (`.zip` for Windows) with `htmlmd`,
   `htmlmd-server` and `SHA256SUMS` at the archive root — same layout as
   `scripts/build-release.sh` produces locally in `dist/<triple>/`
-- targets: linux x86_64 gnu + musl, linux aarch64 gnu, macOS aarch64
+- targets: linux x86_64 gnu + musl, linux aarch64 gnu + musl, macOS aarch64
   (Apple Silicon), Windows x86_64 MSVC
+
+The `gnu` Linux builds link against the build runner's glibc — 2.39 on the
+Ubuntu 24.04 images — so they will not start on an older distro. Raspberry Pi
+OS Bookworm is glibc 2.36, so **Pi users want the `aarch64-unknown-linux-musl`
+archive**, which is statically linked and has no such floor. Same reasoning
+for `x86_64-unknown-linux-musl` on older x86 distros. Point people at the musl
+asset whenever they report a `GLIBC_2.xx not found` error.
 
 and pushes a multi-arch (amd64/arm64) Docker image to
 `ghcr.io/steamvogue/htmlmd-server:vX.Y.Z` and `:latest`.

@@ -26,6 +26,12 @@ jobs:
             os: ubuntu-24.04-arm
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+          # The gnu ARM binary is linked against the runner's glibc (2.39 on
+          # Ubuntu 24.04) and will not start on anything older -- which
+          # includes Raspberry Pi OS Bookworm, still the common Pi install at
+          # glibc 2.36. musl links statically and runs on every Pi.
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
           - target: aarch64-apple-darwin
             os: macos-14
           - target: x86_64-pc-windows-msvc
@@ -38,7 +44,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install musl tools
-        if: matrix.target == 'x86_64-unknown-linux-musl'
+        if: contains(matrix.target, 'musl')
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
