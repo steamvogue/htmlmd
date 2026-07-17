@@ -46,10 +46,9 @@ Same corpus, same rules, run with [`benches/compare/windows/run.ps1`](../benches
 architecture, different OS, different process-spawn cost. Compare tools
 within this table only.
 
-Windows 11, x86_64 (CPU model unrecorded — the tool-vs-tool ratios are the
-result here, and absolute times are machine-specific anyway), quiet machine,
-2026-07-17. hyperfine 1.20.0, mean ± σ; parenthesised figure is slowdown
-relative to htmlmd.
+Windows 11, x86_64 (Intel Core i9-14900HX), quiet machine, 2026-07-17.
+hyperfine 1.20.0, mean ± σ; parenthesised figure is slowdown relative to
+htmlmd.
 
 **The htmlmd under test is the `x86_64-pc-windows-msvc` build with a static
 CRT (`+crt-static`) — byte-for-byte the configuration GitHub Releases ship.**
