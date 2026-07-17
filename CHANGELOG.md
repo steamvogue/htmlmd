@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-17
+
 Everything below is pre-1.0 groundwork: the option schema is still allowed to
 change, and several options were removed outright rather than shipped as
 placeholders. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and
@@ -18,15 +20,22 @@ performance claim.
 - Cross-tool benchmark harness ([`benches/compare/`](benches/compare/)) comparing
   `htmlmd` against turndown, markdownify, pandoc, and Go's html-to-markdown v2
   over identical input, plus in-process criterion rows for `htmd`,
-  `fast_html2md`, and `mdka`.
+  `fast_html2md`, and `mdka`. A portable Windows counterpart
+  ([`benches/compare/windows/`](benches/compare/windows/)) fetches pinned tools
+  into a local folder and can benchmark the msvc and gnu builds head-to-head
+  (`run.ps1 -CompareBuilds`).
 - Property and robustness test suite (`crates/htmlmd-core/tests/properties.rs`):
   determinism, no-panic on arbitrary and adversarial input, profile matrix,
   strict limits, re-conversion stability, garbage sweep.
 - Differential parity suite (`crates/htmlmd-core/tests/native_parity.rs`):
   the native renderer must be byte-identical to the previous engine across
   every profile and fixture.
-- Tag-triggered release workflow: binaries for five targets with `SHA256SUMS`,
+- Tag-triggered release workflow: binaries for six targets with `SHA256SUMS`,
   plus a multi-arch `ghcr.io` server image. `cargo-binstall` metadata.
+  The `aarch64-unknown-linux-musl` build is statically linked so it runs on
+  Raspberry Pi OS Bookworm (glibc 2.36), which the glibc-2.39-linked `gnu`
+  build cannot; the Windows build links the CRT statically (`+crt-static`)
+  so it starts on a clean machine without the VC++ redistributable.
 - `ConversionOptions::commonmark()`, mirroring the other profile constructors.
 - `--verbose` now reports per-file conversion diagnostics.
 - `LICENSE-MIT` / `LICENSE-APACHE`, `CONTRIBUTING.md`, `CHANGELOG.md`.

@@ -35,8 +35,11 @@ git push --tags
 
 ## 4. What the tag triggers
 
-Pushing a `v*` tag runs [`.github/workflows/release.yml`](../.github/workflows/release.yml),
-which creates a GitHub Release (with generated notes) containing, per target:
+Pushing a `v*` tag runs [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+It first runs the full test suite on ubuntu, macos and windows — a tag that
+points at a commit ci.yml never saw does not ship. It then builds every
+target and creates a **draft** GitHub Release (with generated notes)
+containing, per target:
 
 - `htmlmd-vX.Y.Z-<triple>.tar.gz` (`.zip` for Windows) with `htmlmd`,
   `htmlmd-server` and `SHA256SUMS` at the archive root — same layout as
@@ -63,7 +66,16 @@ keeps host and target flags separate. **If you ever drop `--target`, drop this
 flag too.**
 
 and pushes a multi-arch (amd64/arm64) Docker image to
-`ghcr.io/steamvogue/htmlmd-server:vX.Y.Z` and `:latest`.
+`ghcr.io/steamvogue/htmlmd-server:vX.Y.Z`, plus `:latest` for stable tags
+only — a prerelease tag (anything with a `-`, e.g. `v0.2.0-rc.1`) never
+becomes `:latest`.
+
+**The binaries wait as a draft until you publish them; the Docker image does
+not.** An image push is public the moment it lands on ghcr.io — there is no
+draft state for registries — so the test gate is the only thing standing
+between a bad tag and a pullable image. Nothing downloads a draft release
+though, which also means `cargo binstall` fails until the release is
+published.
 
 These archives are what `cargo binstall htmlmd-cli` downloads (see
 `[package.metadata.binstall]` in `crates/htmlmd-cli/Cargo.toml`) — if you
@@ -81,9 +93,11 @@ cargo publish -p htmlmd-cli
 
 Dry-run first if in doubt: `cargo publish --dry-run -p htmlmd-core`.
 
-## 6. Afterwards
+## 6. Inspect the draft, then publish
 
-- Verify the release assets and checksums on the GitHub Releases page.
+- On the GitHub Releases page: six archives plus generated notes. Download
+  one or two, check `SHA256SUMS`, run `htmlmd --version`.
+- Publish the release. Only now do the assets (and `cargo binstall`) go live.
 - `docker run --rm -p 3000:3000 ghcr.io/steamvogue/htmlmd-server:vX.Y.Z`
   and hit `http://localhost:3000/health` as a smoke test.
 - For winget/apt distribution, see [`docs/PACKAGING.md`](PACKAGING.md).
