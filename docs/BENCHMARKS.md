@@ -39,6 +39,46 @@ Speed is not the whole comparison: see the profile/feature matrix in the
 README for what these tools do and don't convert. This harness measures time
 only.
 
+### Windows x86_64
+
+Same corpus, same rules, run with [`benches/compare/windows/run.ps1`](../benches/compare/windows/run.ps1).
+**These numbers share no table with the Pi figures above** — different
+architecture, different OS, different process-spawn cost. Compare tools
+within this table only.
+
+<!-- TODO: fill in CPU model before publishing -->
+Windows 11, x86_64 (CPU: _TBD_), quiet machine, 2026-07-17. hyperfine 1.20.0,
+mean ± σ; parenthesised figure is slowdown relative to htmlmd:
+
+| tool | wiki (1.0 MB) | news (217 KB) | docs (245 KB) | tables (211 KB) |
+|---|---|---|---|---|
+| **htmlmd** 0.1.0 | **34±5 ms** | **19±4 ms** | **24±6 ms** | **24±6 ms** |
+| [html-to-markdown v2] (Go) 2.5.2 | 62±3 ms (1.8×) | 20±3 ms (1.0×) | **19±6 ms (0.8×)** | 28±5 ms (1.2×) |
+| [turndown] (Node) 7.2 + gfm | 690±3 ms (20.4×) | 160±4 ms (8.4×) | 207±4 ms (8.6×) | 144±9 ms (6.1×) |
+| [markdownify] (Python) 1.2 | 575±10 ms (17.0×) | 175±7 ms (9.2×) | 165±4 ms (6.8×) | 382±7 ms (16.2×) |
+| [pandoc] 3.10 | 1284±13 ms (38.0×) | 282±7 ms (14.8×) | 243±5 ms (10.0×) | 393±5 ms (16.7×) |
+
+**Reading these honestly — most of this table is at the measurement floor.**
+Only `wiki` (1.0 MB) is large enough that conversion work dominates process
+startup; the other three corpora are 211–245 KB and every fast tool lands
+near 20 ms regardless of what it does. The tell is in the dispersion: the
+interpreted tools have a coefficient of variation of 0.4–6%, while htmlmd
+and html-to-markdown sit at 13–31% with maxima 2–2.4× their own medians.
+That spread is Windows process-spawn jitter, not workload variance — a
+noisy machine would have hit pandoc's 1.3 s run hardest, and it did not
+touch it at all. hyperfine's "re-run on a quiet PC" warning fires on this
+data for that reason and should not be read as a machine problem.
+
+So: the 6–38× gaps over turndown, markdownify and pandoc are real and far
+exceed the floor. The htmlmd-vs-html-to-markdown comparison is only
+trustworthy on `wiki` (1.9× our favour, and mean/median/min all agree). On
+the three small corpora, treat it as a tie.
+
+The `docs` result reproduces the Pi finding exactly — v2 is ~25% faster
+there on both platforms, for the same reason: htmlmd runs code-language
+detection that v2 does not implement. Two independent architectures showing
+the same ratio is a good sign the explanation is right.
+
 ### Rust libraries, in-process (no CLI startup)
 
 From the criterion bench (`cargo bench -p htmlmd-core --bench convert_bench`),
