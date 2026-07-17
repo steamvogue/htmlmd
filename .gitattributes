@@ -1,0 +1,6 @@
+# LF everywhere, including Windows checkouts. The fixture tests
+# (crates/htmlmd-core/tests/fixtures.rs) compare converter output against
+# fixtures/expected/*.md byte-for-byte; git's autocrlf default on Windows
+# rewrites those files to CRLF at checkout and every fixture test fails
+# with a diff that is nothing but line endings.
+* text=auto eol=lf
