@@ -134,16 +134,24 @@ if (Test-Path (Join-Path $NodeDir 'node.exe')) {
     }
 }
 
+# node_modules has to sit next to adapters\, which the repo keeps one level up
+# and the standalone kit ships beside this script: adapters\turndown.js calls
+# require('turndown'), and Node resolves that from the script's own directory
+# upward, never from the working directory. Left to itself npm picks the root
+# by walking up for the nearest package.json, which lands outside the kit in
+# one layout or the other -- and exits 0 either way, so --prefix is what keeps
+# setup.ps1 and run.ps1 agreeing on where the packages went.
+$NodeRoot = if (Test-Path (Join-Path $Root 'adapters')) {
+    $Root
+} else {
+    (Resolve-Path (Join-Path $Root '..')).Path
+}
+
 Write-Host "==> turndown + turndown-plugin-gfm" -ForegroundColor Cyan
 $npm = Join-Path $NodeDir 'npm.cmd'
-Push-Location $Root
-try {
-    & $npm install --no-fund --no-audit --silent turndown turndown-plugin-gfm
-    if ($LASTEXITCODE -ne 0) { throw "npm install failed ($LASTEXITCODE)" }
-    Write-Host "    -> node_modules\" -ForegroundColor Green
-} finally {
-    Pop-Location
-}
+& $npm install --prefix $NodeRoot --no-fund --no-audit --silent turndown turndown-plugin-gfm
+if ($LASTEXITCODE -ne 0) { throw "npm install failed ($LASTEXITCODE)" }
+Write-Host ("    -> " + (Join-Path $NodeRoot 'node_modules')) -ForegroundColor Green
 
 # --- Python + markdownify (optional) ---------------------------------------
 Write-Host "==> markdownify (optional)" -ForegroundColor Cyan
@@ -182,6 +190,8 @@ foreach ($t in @('hyperfine.exe', 'pandoc.exe', 'html2markdown.exe')) {
     Write-Host ("  {0,-20} {1}" -f $t, $state)
 }
 Write-Host ("  {0,-20} {1}" -f 'node', $(if (Test-Path (Join-Path $NodeDir 'node.exe')) { "OK" } else { "MISSING" }))
+# Checked at the exact path run.ps1 looks in, so the two cannot disagree.
+Write-Host ("  {0,-20} {1}" -f 'turndown', $(if (Test-Path (Join-Path $NodeRoot 'node_modules\turndown')) { "OK" } else { "MISSING" }))
 Write-Host ("  {0,-20} {1}" -f 'markdownify', $(if (Test-Path (Join-Path $Tools 'venv\Scripts\python.exe')) { "OK" } else { "skipped" }))
 
 Write-Host ""

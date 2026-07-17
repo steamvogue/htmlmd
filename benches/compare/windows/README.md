@@ -39,8 +39,10 @@ deliberately and say so when publishing.
 
 Everything is portable: no admin rights, no PATH changes, nothing installed
 system-wide. `rm -r tools node_modules corpus results` undoes it completely.
-Python is the exception — if none is found, markdownify is skipped and the
-run simply omits that row.
+Inside the repo, `node_modules\` lands one level up in `benches\compare\`
+instead, shared with `run.sh` — it has to sit next to `adapters\` for Node to
+resolve it. Python is the exception — if none is found, markdownify is skipped
+and the run simply omits that row.
 
 ## Getting the binaries
 

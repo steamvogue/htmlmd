@@ -76,9 +76,16 @@ $Venv    = Join-Path $Tools 'venv\Scripts\python.exe'
 $H2m     = Join-Path $Tools 'html2markdown.exe'
 $Pandoc  = Join-Path $Tools 'pandoc.exe'
 # Repo layout keeps the adapters one level up; the standalone
-# kit ships them alongside this script.
+# kit ships them alongside this script. node_modules belongs next to whichever
+# one wins: turndown.js resolves require('turndown') from its own directory
+# upward, so packages installed beside run.ps1 are invisible to an adapter that
+# lives one level up. setup.ps1 derives this same root.
 $Adapters = Join-Path $Root 'adapters'
-if (-not (Test-Path $Adapters)) { $Adapters = Join-Path $Root '..\adapters' }
+$NodeRoot = $Root
+if (-not (Test-Path $Adapters)) {
+    $Adapters = Join-Path $Root '..\adapters'
+    $NodeRoot = (Resolve-Path (Join-Path $Root '..')).Path
+}
 
 Write-Host ""
 Write-Host "htmlmd:  $Htmlmd" -ForegroundColor White
@@ -94,11 +101,12 @@ foreach ($doc in @('wiki', 'news', 'docs', 'tables')) {
 
     $cmds = @('--command-name', 'htmlmd', "`"$Htmlmd`" --profile $OutputProfile `"$inputPath`"")
 
-    if ((Test-Path $Node) -and (Test-Path (Join-Path $Root 'node_modules\turndown'))) {
+    if ((Test-Path $Node) -and (Test-Path (Join-Path $NodeRoot 'node_modules\turndown'))) {
         $script = Join-Path $Adapters 'turndown.js'
         $cmds += @('--command-name', 'turndown', "`"$Node`" `"$script`" `"$inputPath`"")
     } else {
-        Write-Warning "turndown skipped (run setup.ps1)"
+        Write-Warning ("turndown skipped (no node_modules\turndown under " +
+                       "$NodeRoot - run setup.ps1)")
     }
 
     if (Test-Path $Venv) {
