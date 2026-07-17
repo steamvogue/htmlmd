@@ -34,8 +34,20 @@ jobs:
             os: ubuntu-24.04-arm
           - target: aarch64-apple-darwin
             os: macos-14
+          # Static CRT, so the exe starts on a clean Windows. The default msvc
+          # build imports VCRUNTIME140.dll, which ships with the VC++
+          # redistributable rather than the OS -- a download that greets an
+          # unlucky user with a missing-DLL box instead of a converter.
+          #
+          # Deliberately here and not in .cargo/config.toml: config rustflags
+          # reach proc macros on a host build (no --target), and crt-static
+          # forbids the dylib crate type proc macros compile to, so serde_derive
+          # and clap_derive would fail to build -- breaking plain `cargo build`
+          # and ci.yml on Windows. The --target below keeps host and target
+          # flags apart, which is what makes this safe.
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            rustflags: "-C target-feature=+crt-static"
     steps:
       - uses: actions/checkout@v4
 
@@ -49,8 +61,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
+      # Empty for every target that sets no rustflags, which is a no-op.
       - name: Build
         run: cargo build --workspace --release --locked --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
 
       # Mirrors the local scripts/build-release.sh layout:
       # dist/<triple>/{htmlmd,htmlmd-server}[.exe] + SHA256SUMS, then a flat

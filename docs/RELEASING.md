@@ -51,6 +51,17 @@ archive**, which is statically linked and has no such floor. Same reasoning
 for `x86_64-unknown-linux-musl` on older x86 distros. Point people at the musl
 asset whenever they report a `GLIBC_2.xx not found` error.
 
+The Windows build sets `-C target-feature=+crt-static` (via `matrix.rustflags`)
+so the exe carries its C runtime instead of importing `VCRUNTIME140.dll`, which
+comes from the VC++ redistributable and is absent on a clean Windows. The flag
+lives in the workflow rather than `.cargo/config.toml` on purpose: config
+rustflags reach proc macros on a host build, `crt-static` forbids the dylib
+crate type proc macros need, and `serde_derive`/`clap_derive` would stop
+building — taking plain `cargo build` and ci.yml on Windows with them. It is
+safe in the workflow only because every build there passes `--target`, which
+keeps host and target flags separate. **If you ever drop `--target`, drop this
+flag too.**
+
 and pushes a multi-arch (amd64/arm64) Docker image to
 `ghcr.io/steamvogue/htmlmd-server:vX.Y.Z` and `:latest`.
 
