@@ -39,10 +39,7 @@ pub(crate) fn post_process(markdown: &str, options: &ConversionOptions) -> Strin
     }
 
     if options.render.normalize_whitespace {
-        s = s
-            .replace('\u{00A0}', " ")
-            .replace('\u{2007}', " ")
-            .replace('\u{202F}', " ");
+        s = s.replace(['\u{00A0}', '\u{2007}', '\u{202F}'], " ");
     }
 
     s

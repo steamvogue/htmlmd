@@ -1258,12 +1258,7 @@ fn is_complex_table(document: &Html, id: NodeId) -> bool {
     for row in el.select(&SEL_TR) {
         let cells = row.select(&SEL_CELLS).count();
         let has_span = row.select(&SEL_SPAN_CELLS).next().is_some_and(|cell| {
-            let val = |attr: &str| {
-                cell.value()
-                    .attr(attr)
-                    .map(|v| v.trim())
-                    .unwrap_or("")
-            };
+            let val = |attr: &str| cell.value().attr(attr).map(|v| v.trim()).unwrap_or("");
             let colspan = val("colspan");
             let rowspan = val("rowspan");
             // Trivial spans (empty or "1") are not complex.
