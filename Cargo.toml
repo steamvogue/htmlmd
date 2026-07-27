@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/htmlmd-core", "crates/htmlmd-cli", "crates/htmlmd-server"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 authors = ["htmlmd contributors"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 # version alongside path so dependent crates can be published to crates.io
-htmlmd-core = { path = "crates/htmlmd-core", version = "0.1.0" }
+htmlmd-core = { path = "crates/htmlmd-core", version = "0.1.1" }
 
 # Core dependencies
 htmd = "0.5.4"

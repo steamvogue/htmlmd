@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-27
+
+### Fixed
+
+- **Tables with `colspan`/`rowspan` no longer emit raw HTML markup.** The
+  default `difficult-table-strategy` is now `flatten` (was `html-fallback`).
+  Spans with trivial values (`""`, `"1"`) also no longer mark a table as
+  complex — they render as normal GFM pipe tables. The previous behavior leaked
+  `<table>`, `<tr>`, `<td>`, `<span>`, `<p>`, `<br>`, and `<a>` tags into
+  conversion output across all profiles (including `plain-text`, which
+  arguably should never emit markup at all).
+- **Tables without `<thead>` now produce proper row-and-column association.**
+  Previously, every cell became its own isolated block; the association
+  between rows was lost. The first data row is now treated as the header row,
+  producing a well-formed GFM pipe table.
+- **Definition lists no longer orphan the term from its definition.**
+  Consecutive `<dt>`/`<dd>` pairs are now combined into a single
+  `Term: definition` line (was two disconnected blocks). This fixes a
+  content-loss vector in drug-label and regulatory document conversion.
+- **Pandoc profile with lists carrying CSS classes no longer passes through
+  as raw HTML.** Only meaningful attributes (beyond `class`, `style`, `id`,
+  `dir`, `lang`) force HTML serialization in faithful mode. Lists with
+  presentational-only attributes now convert to Markdown.
+- **`<img alt>` text is now annotated** with an `(Image: ...)` prefix in
+  `alt-text` image mode, so consumers can distinguish accessibility
+  descriptions from body prose. Previous behavior rendered alt text
+  indistinguishably from sentences on the page, which is a fabrication risk
+  for automated downstream consumers.
+
+### Added
+
+- **`--normalize-whitespace` flag and `normalize-whitespace` config option.**
+  When enabled, folds non-breaking space characters (U+00A0, U+2007, U+202F)
+  to regular spaces (U+0020). This allows downstream pattern-matching
+  (especially header-section extraction) to work across real-world input that
+  uses U+00A0 as a separator.
+
+### Changed
+
+- `difficult-table-strategy` default is now `flatten` (was `html-fallback`).
+
 ## [0.1.0] - 2026-07-17
 
 Everything below is pre-1.0 groundwork: the option schema is still allowed to

@@ -231,7 +231,7 @@ fn extended_profile_semantic_features() {
     assert!(md.contains("<kbd>Ctrl</kbd>"));
     assert!(md.contains("[^1]"));
     assert!(md.contains("[^1]: Footnote text."));
-    assert!(md.contains("Term\n: Definition text."));
+    assert!(md.contains("Term: Definition text."));
     assert!(md.contains("$E=mc^2$"));
     assert!(md.contains("> [!NOTE]"));
     assert!(md.contains("> This is an alert."));

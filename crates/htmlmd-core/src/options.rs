@@ -464,6 +464,8 @@ pub struct RenderOptions {
     pub image_mode: ImageMode,
     pub title_attribute: TitleHandling,
     pub raw_html_policy: RawHtmlPolicy,
+    /// Fold non-breaking spaces to regular spaces.
+    pub normalize_whitespace: bool,
 }
 
 impl Default for RenderOptions {
@@ -482,6 +484,7 @@ impl Default for RenderOptions {
             image_mode: ImageMode::Inline,
             title_attribute: TitleHandling::Ignore,
             raw_html_policy: RawHtmlPolicy::Drop,
+            normalize_whitespace: false,
         }
     }
 }
@@ -598,7 +601,7 @@ impl Default for SemanticOptions {
             heading_offset: 0,
             task_lists: true,
             table_handling: TableHandling::Gfm,
-            difficult_table_strategy: DifficultTableStrategy::HtmlFallback,
+            difficult_table_strategy: DifficultTableStrategy::Flatten,
             code_language_patterns: vec![
                 r"language-(?P<lang>\S+)".to_string(),
                 r"lang-(?P<lang>\S+)".to_string(),

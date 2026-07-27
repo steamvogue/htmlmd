@@ -21,7 +21,7 @@ use scraper::Node;
 pub(crate) fn table_handler(handlers: &dyn Handlers, element: Element) -> Option<HandlerResult> {
     serialize_if_faithful!(handlers, element, 0);
     if handlers.options().translation_mode == TranslationMode::Pure
-        && (!has_explicit_headers(element.node) || is_inside_table_cell(element.node))
+        && is_inside_table_cell(element.node)
     {
         return handlers.fallback(element);
     }
@@ -181,30 +181,6 @@ pub(crate) fn table_handler(handlers: &dyn Handlers, element: Element) -> Option
 
     table_md.push('\n');
     Some(table_md.into())
-}
-
-fn has_explicit_headers(node: NodeRef<'_, Node>) -> bool {
-    fn visit(node: NodeRef<'_, Node>, is_root: bool) -> bool {
-        for child in get_node_children(node) {
-            if let Node::Element(child_element) = child.value() {
-                let tag_name = child_element.name.local.as_ref();
-                if !is_root && tag_name == "table" {
-                    continue;
-                }
-                if matches!(tag_name, "th" | "thead") {
-                    return true;
-                }
-            }
-
-            if visit(child, false) {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    visit(node, true)
 }
 
 fn is_inside_table_cell(node: NodeRef<'_, Node>) -> bool {

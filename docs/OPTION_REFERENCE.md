@@ -30,6 +30,7 @@ Legend:
 | `image-mode`              | enum   | `inline`      | ✅     | `inline`, `skip`, `alt-text`, `reference`    |
 | `title-attribute`         | enum   | `ignore`      | ⚠️     | `ignore` strips titles; `inline`/`reference` not wired |
 | `raw-html-policy`         | enum   | `drop`        | ✅     | `faithful` enables `htmd` faithful mode      |
+| `normalize-whitespace`    | bool   | `false`       | ✅     | Fold U+00A0, U+2007, U+202F to U+0020        |
 
 ## `[cleanup]` – HTML cleanup and content selection
 
@@ -66,7 +67,7 @@ Legend:
 | `heading-offset`          | i8       | `0`                              | ✅     | Shift heading levels by a signed amount; result clamped to `h1`..`h6` |
 | `task-lists`              | bool     | `true`                           | ✅     | `<input type="checkbox">` list items become `[ ]`/`[x]` task markers |
 | `table-handling`          | enum     | `gfm`                            | ✅     | `gfm`, `html-fallback`, `csv-like`, `flatten`, `drop` |
-| `difficult-table-strategy`| enum     | `html-fallback`                  | ⚠️     | `html-fallback`/`flatten` wired; `span-cells` reserved |
+| `difficult-table-strategy`| enum     | `flatten`                        | ✅     | `html-fallback`, `flatten`, `span-cells` wired |
 | `code-language-patterns`  | [string] | `language-*`, `lang-*`, …        | ✅     | Class/language extraction |
 | `detect-languages`        | bool     | `true`                           | ✅     | Heuristic language detection for bare code blocks |
 | `definition-lists`        | bool     | `false`                          | ✅     | Pandoc-style definition lists |
@@ -130,6 +131,7 @@ Legend:
 | `--metadata-title`            | ✅     | Extract `<title>` into result metadata |
 | `--metadata-description`      | ✅     | Extract `meta[name="description"]` |
 | `--metadata-canonical-url`    | ✅     | Extract `link[rel="canonical"]` |
+| `--normalize-whitespace`      | ✅     | Fold non-breaking spaces to regular spaces |
 | `--strict`                    | ✅     | Turn warnings into errors |
 
 ## Configuration layers

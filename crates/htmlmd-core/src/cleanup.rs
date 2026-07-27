@@ -684,7 +684,12 @@ fn apply_image_handling(document: &mut Html, options: &ConversionOptions, ids: &
         // rewrites the DOM here.
         if options.cleanup.image_mode == ImageMode::AltText {
             let alt = image_alt(document, id);
-            replace_with_text(document, id, &alt);
+            let annotated = if alt.is_empty() {
+                String::new()
+            } else {
+                format!("(Image: {alt})")
+            };
+            replace_with_text(document, id, &annotated);
         }
     }
 }
@@ -1252,7 +1257,20 @@ fn is_complex_table(document: &Html, id: NodeId) -> bool {
     let mut row_lengths = Vec::new();
     for row in el.select(&SEL_TR) {
         let cells = row.select(&SEL_CELLS).count();
-        let has_span = row.select(&SEL_SPAN_CELLS).next().is_some();
+        let has_span = row.select(&SEL_SPAN_CELLS).next().is_some_and(|cell| {
+            let val = |attr: &str| {
+                cell.value()
+                    .attr(attr)
+                    .map(|v| v.trim())
+                    .unwrap_or("")
+            };
+            let colspan = val("colspan");
+            let rowspan = val("rowspan");
+            // Trivial spans (empty or "1") are not complex.
+            let nontrivial_colspan = !colspan.is_empty() && colspan != "1";
+            let nontrivial_rowspan = !rowspan.is_empty() && rowspan != "1";
+            nontrivial_colspan || nontrivial_rowspan
+        });
         if has_span {
             return true;
         }

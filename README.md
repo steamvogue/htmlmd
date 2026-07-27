@@ -2,10 +2,22 @@
 
 [![CI](https://github.com/steamvogue/htmlmd/actions/workflows/ci.yml/badge.svg)](https://github.com/steamvogue/htmlmd/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![crates.io](https://img.shields.io/crates/v/htmlmd-core.svg)](https://crates.io/crates/htmlmd-core)
 
 A fast, configurable, cross-platform HTML-to-Markdown converter written in
 Rust — available as a library (`htmlmd-core`), a CLI (`htmlmd`), and an HTTP
 API server (`htmlmd-server`).
+
+### What's new in 0.1.1
+
+Six conversion-correctness defects found in regulatory-document processing
+have been fixed: tables with `colspan`/`rowspan` no longer emit raw HTML,
+headerless tables preserve cell-to-row association, definition lists no longer
+orphan terms from their definitions, Pandoc-profile lists with CSS classes
+convert to Markdown instead of passing through as raw HTML, and image alt text
+is annotated so consumers can distinguish it from body prose. A new
+`--normalize-whitespace` flag folds non-breaking spaces for reliable
+downstream pattern matching. See the [changelog](CHANGELOG.md) for details.
 
 ## Highlights
 
@@ -14,8 +26,9 @@ API server (`htmlmd-server`).
   renderer actually supports.
 - **Extended Markdown** — footnotes, definition lists, math, GitHub-style
   alerts, mermaid diagrams, semantic tags (`mark`, `ins`, `sub`, `kbd`, …).
-- **Table strategies** — GFM pipe tables with HTML fallback for complex
-  tables, plus CSV-like, flatten, and drop modes.
+- **Table strategies** — GFM pipe tables with flatten fallback for complex
+  tables (rowspan/colspan, irregular columns), plus CSV-like, HTML fallback,
+  and drop modes.
 - **Custom per-selector rules** — `drop`, `unwrap`, `text`, `html`,
   `markdown-template`, `fenced-block`, `link`, `image` actions keyed on CSS
   selectors.

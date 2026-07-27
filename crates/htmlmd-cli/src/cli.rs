@@ -157,6 +157,10 @@ pub struct Cli {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Fold non-breaking spaces (U+00A0, U+2007, U+202F) to regular spaces.
+    #[arg(long)]
+    pub normalize_whitespace: bool,
+
     /// Suppress non-error output.
     #[arg(short, long)]
     pub quiet: bool,

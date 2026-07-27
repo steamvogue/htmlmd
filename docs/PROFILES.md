@@ -8,7 +8,7 @@
 |---------|-------------|-------------|
 | `commonmark` | Standard CommonMark output. | Generic Markdown, maximum portability. |
 | `gfm` | GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks). | GitHub/GitLab repos, GFM renderers. |
-| `extended` | Footnotes, definition lists, math, GitHub alerts, mermaid, semantic tags. | Static sites, note-taking tools. |
+| `extended` | Footnotes, definition lists (`Term: definition` format), math, GitHub alerts, mermaid, semantic tags. | Static sites, note-taking tools. |
 | `pandoc` | Like `extended`, but raw HTML is preserved. | Pandoc workflows. |
 | `obsidian` | `extended` features plus YAML frontmatter and Obsidian-style `[[wikilinks]]`. | Obsidian vaults. |
 | `mdx-safe` | `extended` features with raw HTML dropped/escaped and JSX braces escaped. | MDX/Next.js/Docusaurus. |
@@ -79,8 +79,7 @@ A footnote reference[^1].
 
 [^1]: Footnote text.
 
-Term
-: Definition text.
+Term: Definition text.
 
 [another note](<Another page>)
 
@@ -117,8 +116,7 @@ A footnote reference[^1].
 
 [^1]: Footnote text.
 
-Term
-: Definition text.
+Term: Definition text.
 
 [[Another page|another note]]
 
@@ -165,8 +163,7 @@ A footnote reference[^1].
 
 [^1]: Footnote text.
 
-Term
-: Definition text.
+Term: Definition text.
 
 [another note](<Another page>)
 
@@ -179,7 +176,7 @@ This is an alert.
 
 ### Plain text
 
-Plain text removes Markdown markup and converts images to their alt text. Useful for full-text search or summaries.
+Plain text removes Markdown markup and converts images to their alt text (annotated as `(Image: alt text)`). Useful for full-text search or summaries.
 
 ```bash
 htmlmd --profile plain-text fixtures/basic.html

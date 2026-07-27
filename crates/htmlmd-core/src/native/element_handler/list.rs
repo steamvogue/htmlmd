@@ -5,7 +5,6 @@ use scraper::Node;
 
 use crate::native::{
     Element,
-    element_handler::element_util::serialize_if_faithful,
     element_handler::{HandlerResult, Handlers, serialize_element},
     node_util::{get_node_tag_name, get_parent_node},
     options::{Options, TranslationMode},
@@ -16,11 +15,23 @@ pub(super) fn list_handler(handlers: &dyn Handlers, element: Element) -> Option<
     // In faithful mode, ...
     if handlers.options().translation_mode == TranslationMode::Faithful {
         // ...make sure this element's attributes can be translated as markdown.
-        let has_start = element
+        // Presentational attributes (class, style, id, dir, lang) are safe to
+        // drop; only non-trivial attributes require HTML serialization.
+        let meaningful_attr_count = element
             .attrs
-            .first()
-            .is_some_and(|(name, _)| name.local.as_ref() == "start");
-        serialize_if_faithful!(handlers, element, if has_start { 1 } else { 0 });
+            .iter()
+            .filter(|(name, _)| {
+                let n = name.local.as_ref();
+                n != "class" && n != "style" && n != "id" && n != "dir" && n != "lang"
+            })
+            .count();
+        let allowed = 1; // allow "start" for <ol>
+        if meaningful_attr_count > allowed {
+            return Some(HandlerResult {
+                content: serialize_element(handlers, &element),
+                markdown_translated: false,
+            });
+        }
 
         // ...all children must be translated as Markdown, and all children must
         // be li elements.

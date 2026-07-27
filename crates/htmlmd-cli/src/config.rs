@@ -138,4 +138,7 @@ fn apply_cli_overrides(opts: &mut ConversionOptions, cli: &Cli) {
     if let Some(i) = cli.image_mode {
         opts.cleanup.image_mode = i.into();
     }
+    if cli.normalize_whitespace {
+        opts.render.normalize_whitespace = true;
+    }
 }

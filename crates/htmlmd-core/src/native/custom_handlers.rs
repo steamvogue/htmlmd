@@ -296,7 +296,14 @@ fn definition_list_handler(h: &dyn Handlers, e: Element<'_>) -> Option<HandlerRe
         }
         match element.name.local.as_ref() {
             "dt" => items.push(content),
-            "dd" => items.push(format!(": {content}")),
+            "dd" => {
+                if let Some(last) = items.last_mut() {
+                    // Combine with the preceding dt: "Term: Definition text."
+                    *last = format!("{last}: {content}");
+                } else {
+                    items.push(format!(": {content}"));
+                }
+            }
             _ => {}
         }
     }
