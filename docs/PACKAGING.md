@@ -126,8 +126,8 @@ Add a `[package.metadata.deb]` section to `crates/htmlmd-cli/Cargo.toml` if you 
 maintainer = "htmlmd contributors <htmlmd@example.com>"
 copyright = "2026, htmlmd contributors"
 extended-description = """\
-  A fast, configurable HTML-to-Markdown converter \
-  with multiple output profiles."""
+  A fast HTML data-preparation CLI for AI agents and RAG pipelines, \
+  with configurable Markdown and plain-text output."""
 section = "utils"
 priority = "optional"
 assets = [

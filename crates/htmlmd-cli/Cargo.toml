@@ -6,17 +6,17 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Command-line interface for htmlmd, the fast HTML to Markdown converter."
+description = "Fast Rust CLI that prepares clean Markdown or text from HTML for AI and RAG pipelines."
 readme = "../../README.md"
-keywords = ["html", "markdown", "converter", "commonmark", "cli"]
+keywords = ["html", "markdown", "ai", "rag", "cli"]
 categories = ["command-line-utilities", "text-processing"]
 
 [package.metadata.deb]
 maintainer = "htmlmd contributors"
 copyright = "2026, htmlmd contributors"
 extended-description = """\
-  A fast, configurable HTML-to-Markdown converter \
-  with multiple output profiles."""
+  A fast HTML data-preparation CLI for AI agents and RAG pipelines, \
+  with configurable Markdown and plain-text output."""
 section = "utils"
 priority = "optional"
 

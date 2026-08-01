@@ -6,10 +6,17 @@ use clap::{Parser, ValueEnum};
 
 /// Command-line interface for `htmlmd`.
 #[derive(Debug, Parser)]
-#[command(name = "htmlmd", version, about = "Convert HTML to Markdown", long_about = None)]
+#[command(
+    name = "htmlmd",
+    version,
+    about = "Prepare clean Markdown or text from HTML for AI pipelines",
+    long_about = None
+)]
 pub struct Cli {
-    /// Input HTML files, directories, or glob patterns. Use `-` for stdin.
-    /// Multiple files are processed in parallel.
+    /// Input HTML files, directories, or glob patterns. Directories include
+    /// direct `.html`/`.htm` files; use `--recursive` for descendants. Batch
+    /// inputs write to the current directory unless `--output-dir` is given.
+    /// Use `-` for stdin.
     pub inputs: Vec<String>,
 
     /// Output file. Use `-` for stdout (default). Not allowed for multiple inputs
@@ -17,15 +24,15 @@ pub struct Cli {
     #[arg(short, long, value_name = "PATH")]
     pub output: Option<PathBuf>,
 
-    /// Output directory for batch conversions.
+    /// Output directory for batch conversions (default: current directory).
     #[arg(long, value_name = "DIR")]
     pub output_dir: Option<PathBuf>,
 
-    /// Mirror the input directory tree under `--output-dir`.
-    #[arg(long)]
+    /// Preserve input-relative subdirectories under the batch output directory.
+    #[arg(short = 'm', long)]
     pub mirror: bool,
 
-    /// Recurse into directories to find `.html` files.
+    /// Recurse into directories to find `.html` and `.htm` files.
     #[arg(short, long)]
     pub recursive: bool,
 

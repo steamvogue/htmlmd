@@ -4,20 +4,46 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![crates.io](https://img.shields.io/crates/v/htmlmd-core.svg)](https://crates.io/crates/htmlmd-core)
 
-A fast, configurable, cross-platform HTML-to-Markdown converter written in
-Rust — available as a library (`htmlmd-core`), a CLI (`htmlmd`), and an HTTP
-API server (`htmlmd-server`).
+**Turn noisy HTML into clean, model-ready Markdown or text for AI agents, RAG
+pipelines, and LLM applications.**
 
-### What's new in 0.1.1
+`htmlmd` is a fast Rust data-preparation toolkit available as a library
+(`htmlmd-core`), CLI (`htmlmd`), and HTTP API server (`htmlmd-server`). It
+removes page chrome, normalizes content, extracts metadata, and produces
+predictable Markdown or plain text before web content reaches your model.
 
-Six conversion-correctness defects found in regulatory-document processing
-have been fixed: tables with `colspan`/`rowspan` no longer emit raw HTML,
-headerless tables preserve cell-to-row association, definition lists no longer
-orphan terms from their definitions, Pandoc-profile lists with CSS classes
-convert to Markdown instead of passing through as raw HTML, and image alt text
-is annotated so consumers can distinguish it from body prose. A new
-`--normalize-whitespace` flag folds non-breaking spaces for reliable
-downstream pattern matching. See the [changelog](CHANGELOG.md) for details.
+![htmlmd turns noisy webpage HTML into clean Markdown for AI](docs/assets/htmlmd-ai-before-after.svg)
+
+## Built for AI data preparation
+
+- **Agent tools** — give browsing and research agents focused page content
+  instead of navigation, ads, scripts, and tracking parameters.
+- **RAG ingestion** — batch-convert captured HTML into consistent Markdown,
+  readable text, and metadata for chunking and indexing.
+- **LLM context pipelines** — select the useful DOM, normalize whitespace and
+  links, and choose a stable output profile before prompting a model.
+- **Production services** — embed the Rust library, call the CLI, or run the
+  guarded HTTP API with input, output, and DOM-depth limits.
+
+```bash
+# Fetch with your crawler or HTTP client, then prepare the article for AI.
+curl -s https://example.com/article \
+  | htmlmd --profile gfm --keep-only-selectors article \
+      --remove-tracking-params true -
+```
+
+`htmlmd` converts HTML you provide; pair it with your crawler, browser, or HTTP
+client when you also need page fetching or JavaScript rendering.
+
+## What's new in 0.1.2
+
+Input selection now uses one consistent syntax: positional inputs accept files,
+directories, and glob masks. A directory selects direct `.html`/`.htm` files;
+add `-r` / `--recursive` for descendants. Directory, glob, and multi-file
+inputs are treated as batches and default to the current directory when
+`--output-dir` is omitted. `-m` / `--mirror` preserves input-relative paths,
+and flat batches now reject output-name collisions before writing. See the
+[changelog](CHANGELOG.md) for details.
 
 ## Highlights
 
@@ -103,7 +129,86 @@ htmlmd --profile obsidian --metadata-title --metadata-description page.html
 htmlmd -o page.md page.html
 ```
 
-### Profiles
+## Use examples
+
+### One document
+
+```bash
+# Print Markdown to stdout
+htmlmd page.html
+
+# Write one explicit output file
+htmlmd page.html -o page.md
+
+# Convert HTML received on stdin
+curl -s https://example.com/article | htmlmd -
+```
+
+One explicit file writes to stdout unless `-o` is provided. A directory, glob,
+or multiple input paths signals a batch and writes `.md` files to the current
+directory by default. Use `--output-dir DIR` to choose another batch root.
+
+### Directory batches and mirroring
+
+Given this input tree:
+
+```text
+site/
+├── index.html
+├── about.htm
+├── ignored.txt
+└── docs/
+    └── guide.html
+```
+
+the output mapping is:
+
+| Command | Selected inputs | Outputs |
+|---|---|---|
+| `htmlmd site/` | Direct `.html`/`.htm` files | `./index.md`, `./about.md` |
+| `htmlmd site/ -r` | Direct files and descendants | `./index.md`, `./about.md`, `./guide.md` |
+| `htmlmd site/ -r -m` | Direct files and descendants | `./index.md`, `./about.md`, `./docs/guide.md` |
+| `htmlmd site/ -r -m --output-dir out/` | Direct files and descendants | `out/index.md`, `out/about.md`, `out/docs/guide.md` |
+
+Without `-m`, batch outputs are flattened into the output root. With `-m`,
+each output keeps the input path relative to the selected directory (or to a
+glob's non-wildcard prefix). `--mirror` changes output mapping only; it does not
+select additional input files. If a flat batch contains duplicate basenames,
+`htmlmd` stops before writing and recommends `-m`.
+
+Batch output uses the `overwrite` policy by default. Use an explicit
+`--output-dir out/` to keep generated files isolated, or add
+`--output-policy fail-if-exists` when existing files must never be replaced.
+
+### Masks and multiple input paths
+
+```bash
+# Quote a mask when htmlmd should expand it rather than the shell
+htmlmd 'pages/*.html'
+
+# Select more than one source; outputs default to the current directory
+htmlmd intro.html reference.htm
+
+# Put a batch elsewhere and record a manifest
+htmlmd 'pages/*.html' --output-dir out/ --manifest manifest.json
+
+# Run conversions with four workers
+htmlmd site/ -r -m --output-dir out/ --jobs 4
+```
+
+### Verification and AI preparation
+
+```bash
+# Verify an existing generated file without changing it
+htmlmd page.html -o page.md --check --diff
+
+# Keep the article, strip tracking parameters, and emit model-ready GFM
+curl -s https://example.com/article \
+  | htmlmd - --profile gfm --keep-only-selectors article \
+      --remove-tracking-params true
+```
+
+## Profiles
 
 | Profile      | Notes                                                     |
 |--------------|-----------------------------------------------------------|
@@ -117,23 +222,7 @@ htmlmd -o page.md page.html
 
 See [`docs/PROFILES.md`](docs/PROFILES.md) for details and examples.
 
-### Batch conversion
-
-```bash
-# Output directory with a manifest
-htmlmd --output-dir out/ --manifest manifest.json pages/*.html
-
-# Mirror a directory tree
-htmlmd --recursive --mirror --output-dir out/ site/
-
-# Verify existing outputs without writing (CI-friendly)
-htmlmd --check --diff -o page.md page.html
-
-# Parallel jobs
-htmlmd --jobs 4 --output-dir out/ pages/*.html
-```
-
-### Configuration
+## Configuration
 
 ```bash
 htmlmd --print-default-config          # dump the default config
@@ -208,7 +297,9 @@ cargo run -p htmlmd-server --release
 # POST /convert with HTML body → Markdown
 ```
 
-See [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md).
+See [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md) for the API and
+[`docs/SERVER_DEPLOYMENT.md`](docs/SERVER_DEPLOYMENT.md) for private-backend
+Apache/Nginx proxying, authentication, and automatic restart configuration.
 
 ## Exit codes
 
@@ -223,6 +314,7 @@ See [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md).
 - [`docs/BUILD_AND_DEPLOY.md`](docs/BUILD_AND_DEPLOY.md) – building per platform, deployment.
 - [`docs/PACKAGING.md`](docs/PACKAGING.md) – winget and apt packages.
 - [`docs/API_AND_WEB_SERVICE.md`](docs/API_AND_WEB_SERVICE.md) – the HTTP API server.
+- [`docs/SERVER_DEPLOYMENT.md`](docs/SERVER_DEPLOYMENT.md) – production reverse proxies, authentication, and process supervision.
 - [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) – method, results, and the reproducible harness.
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) – project status, workspace layout, contributor/AI-assistant notes.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) – performance & quality roadmap.

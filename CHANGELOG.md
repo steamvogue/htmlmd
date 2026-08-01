@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-01
+
+### Added
+
+- **Short `-m` alias for `--mirror`.**
+- **Production server deployment guide.** Added complete Apache HTTP Server 2.4
+  and Nginx reverse-proxy examples, TLS and proxy-layer authentication options,
+  systemd supervision, Docker restart policies, and a deployment checklist.
+
+### Fixed
+
+- **Mirrored batch output now preserves the input directory tree.** Nested
+  files are mapped relative to the selected directory or the non-glob prefix
+  of a mask instead of being flattened to their basenames.
+- **Flat batches reject output-name collisions before writing.** Inputs such
+  as `a/page.html` and `b/page.htm` can no longer race to overwrite the same
+  `page.md`; the error recommends `--mirror`.
+
+### Changed
+
+- Public-facing descriptions now position `htmlmd` as an HTML data-preparation
+  toolkit for AI agents, RAG pipelines, and LLM applications.
+- Positional directory inputs now select direct `.html`/`.htm` files without
+  requiring `--recursive`; the flag controls whether descendants are included.
+- Directory, glob, and multi-path inputs are treated as batches and default to
+  the current directory when `--output-dir` is omitted. Single explicit files
+  retain their stdout behavior.
+
 ## [0.1.1] - 2026-07-27
 
 ### Fixed

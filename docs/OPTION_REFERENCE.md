@@ -96,9 +96,9 @@ Legend:
 | Flag                          | Status | Notes |
 |-------------------------------|--------|-------|
 | `-o`, `--output`              | ✅     | Output file (`-` for stdout) |
-| `--output-dir`                | ✅     | Batch output directory |
-| `--mirror`                    | ✅     | Preserve directory tree under `--output-dir` |
-| `--recursive`                 | ✅     | Recurse directories for `.html`/`.htm` |
+| `--output-dir`                | ✅     | Batch output directory (default: current directory) |
+| `-m`, `--mirror`              | ✅     | Preserve input-relative paths under the batch output directory |
+| `-r`, `--recursive`           | ✅     | Recurse directories for `.html`/`.htm` |
 | `--output-policy`             | ✅     | `overwrite`, `skip-existing`, `fail-if-exists` |
 | `--atomic`                    | ✅     | Write via temp file + rename |
 | `--preserve-timestamps`       | ✅     | Copy input timestamps to output |
@@ -133,6 +133,15 @@ Legend:
 | `--metadata-canonical-url`    | ✅     | Extract `link[rel="canonical"]` |
 | `--normalize-whitespace`      | ✅     | Fold non-breaking spaces to regular spaces |
 | `--strict`                    | ✅     | Turn warnings into errors |
+
+Positional inputs accept files, directories, and glob masks. A directory
+selects only its direct `.html` and `.htm` files unless `--recursive` is
+present. Quote masks (for example, `'pages/*.html'`) when `htmlmd` should
+expand them instead of the shell. A directory, glob, or multiple paths signals
+a batch and writes to the current directory unless `--output-dir` is present.
+`-o` remains a single output file and is valid only when all inputs resolve to
+one file. `--mirror` changes output paths only; it preserves each path relative
+to the selected directory or a glob's non-wildcard prefix.
 
 ## Configuration layers
 

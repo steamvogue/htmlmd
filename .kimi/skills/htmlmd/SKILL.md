@@ -60,6 +60,10 @@ dist/aarch64-unknown-linux-gnu/htmlmd --profile obsidian --metadata-title fixtur
 ## Common flags
 
 ```bash
+-o, --output <path>             # single output file
+--output-dir <dir>              # batch root; defaults to current directory
+-m, --mirror                    # preserve input-relative paths in batch output
+-r, --recursive                 # include descendant .html/.htm files
 --profile <name>                # output profile
 --metadata-title                # extract <title>
 --metadata-description          # extract meta description
@@ -120,7 +124,9 @@ dist/aarch64-unknown-linux-gnu/htmlmd --image-mode skip fixtures/image_mode.html
 ### Batch conversion
 
 ```bash
-dist/aarch64-unknown-linux-gnu/htmlmd --output-dir out/ --manifest manifest.json fixtures/*.html
+dist/aarch64-unknown-linux-gnu/htmlmd fixtures/ --output-dir out/
+dist/aarch64-unknown-linux-gnu/htmlmd 'fixtures/*.html' --output-dir out/ --manifest manifest.json
+dist/aarch64-unknown-linux-gnu/htmlmd site/ -r -m --output-dir out/
 ```
 
 ### Use a config file
@@ -179,6 +185,9 @@ Response:
 {"markdown":"# Hello\n","title":null,"description":null,"canonical_url":null,"diagnostics":[]}
 ```
 
+For Apache or Nginx reverse proxying, TLS, authentication, and automatic
+restart configuration, see `docs/SERVER_DEPLOYMENT.md`.
+
 ## Gotchas
 
 - If `dist/aarch64-unknown-linux-gnu/htmlmd` is missing, run `cargo build -p htmlmd-cli --release` and look in `target/release/htmlmd`.
@@ -190,6 +199,7 @@ Response:
 
 - `docs/PROFILES.md` — profile details and examples
 - `docs/API_AND_WEB_SERVICE.md` — running the HTTP service
+- `docs/SERVER_DEPLOYMENT.md` — production proxy, authentication, and supervision
 - `docs/OPTION_REFERENCE.md` — every option and CLI flag
 - `docs/BUILD_AND_DEPLOY.md` — building for Linux/Windows/macOS
 - `docs/PACKAGING.md` — winget and apt-get packaging

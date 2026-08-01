@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">htmlmd prepares noisy HTML for AI</title>
+  <desc id="desc">A side-by-side comparison of a webpage containing navigation, article content, advertising, tracking parameters, and JavaScript with the clean Markdown produced by htmlmd.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="520" rx="24" fill="url(#background)"/>
+  <text x="48" y="55" fill="#f0f6fc" font-family="system-ui, sans-serif" font-size="25" font-weight="700">Prepare web content for AI with htmlmd</text>
+  <text x="48" y="84" fill="#8b949e" font-family="system-ui, sans-serif" font-size="15">Keep the useful content. Drop the page noise.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="48" y="116" width="500" height="352" rx="14" fill="#010409" stroke="#30363d"/>
+    <rect x="652" y="116" width="500" height="352" rx="14" fill="#010409" stroke="#238636"/>
+  </g>
+
+  <circle cx="76" cy="144" r="5" fill="#ff7b72"/>
+  <circle cx="94" cy="144" r="5" fill="#d29922"/>
+  <circle cx="112" cy="144" r="5" fill="#3fb950"/>
+  <text x="132" y="150" fill="#8b949e" font-family="system-ui, sans-serif" font-size="13" font-weight="600">NOISY WEBPAGE HTML</text>
+
+  <circle cx="680" cy="144" r="5" fill="#3fb950"/>
+  <text x="696" y="150" fill="#7ee787" font-family="system-ui, sans-serif" font-size="13" font-weight="600">MODEL-READY MARKDOWN</text>
+
+  <g fill="#c9d1d9" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16">
+    <text x="72" y="192">&lt;nav&gt;Home Pricing Sign in&lt;/nav&gt;</text>
+    <text x="72" y="224">&lt;article&gt;</text>
+    <text x="92" y="256">&lt;h1&gt;Build a research agent&lt;/h1&gt;</text>
+    <text x="92" y="288">&lt;p&gt;Give your agent focused</text>
+    <text x="92" y="312">source material.&lt;/p&gt;</text>
+    <text x="92" y="344">&lt;a href="...guide?utm_source=news"&gt;</text>
+    <text x="112" y="368">Read the guide&lt;/a&gt;</text>
+    <text x="72" y="400">&lt;/article&gt;</text>
+    <text x="72" y="432" fill="#ff7b72">&lt;aside&gt;Sponsored offer&lt;/aside&gt;</text>
+    <text x="72" y="456" fill="#ff7b72">&lt;script&gt;trackVisitor()&lt;/script&gt;</text>
+  </g>
+
+  <g fill="#e6edf3" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16">
+    <text x="676" y="198" fill="#7ee787" font-size="21" font-weight="700"># Build a research agent</text>
+    <text x="676" y="244">Give your agent focused source material.</text>
+    <text x="676" y="292">- Keep useful links</text>
+    <text x="676" y="324">- Drop page chrome</text>
+    <text x="676" y="380" fill="#79c0ff">[Read the guide](https://example.com/guide)</text>
+  </g>
+
+  <g transform="translate(574 272)">
+    <circle cx="26" cy="26" r="26" fill="#238636"/>
+    <path d="M15 26h19m-7-7 7 7-7 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -203,6 +203,9 @@ for the step-by-step release runbook.
 
 ### Docker deployment
 
+For a private loopback binding, reverse proxy, authentication, and restart
+policy, see [Production server deployment](SERVER_DEPLOYMENT.md).
+
 The HTTP server ships with a real Dockerfile at
 [`crates/htmlmd-server/Dockerfile`](../crates/htmlmd-server/Dockerfile).
 Build it from the **workspace root** (the build context must contain the

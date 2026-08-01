@@ -171,74 +171,13 @@ curl -s -X POST http://127.0.0.1:3000/convert \
   }'
 ```
 
-## Deploying the service
+## Production deployment
 
-### Using systemd
-
-Create `/etc/systemd/system/htmlmd-server.service`:
-
-```ini
-[Unit]
-Description=htmlmd conversion API
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/htmlmd-server
-Environment=HTMLMD_BIND=127.0.0.1:3000
-Restart=on-failure
-User=www-data
-Group=www-data
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now htmlmd-server
-```
-
-### Behind nginx
-
-```nginx
-server {
-    listen 80;
-    server_name htmlmd.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
-
-### Docker
-
-```dockerfile
-FROM rust:1.94 AS builder
-WORKDIR /app
-COPY . .
-RUN cargo build -p htmlmd-server --release
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/htmlmd-server /usr/local/bin/htmlmd-server
-ENV HTMLMD_BIND=0.0.0.0:3000
-EXPOSE 3000
-ENTRYPOINT ["htmlmd-server"]
-```
-
-Build and run:
-
-```bash
-docker build -t htmlmd-server -f crates/htmlmd-server/Dockerfile .
-docker run -p 3000:3000 htmlmd-server
-```
+See [Production server deployment](SERVER_DEPLOYMENT.md) for complete Apache
+HTTP Server 2.4 and Nginx reverse-proxy examples, HTTPS, Basic or bearer-token
+authentication, systemd supervision, Docker restart policies, and a production
+checklist. Platform builds and container-image details remain in
+[Building and deploying `htmlmd`](BUILD_AND_DEPLOY.md).
 
 ## Notes
 

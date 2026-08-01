@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -58,12 +59,13 @@ pub fn read_jobs(cli: &Cli) -> Result<Vec<Job>> {
 
 fn resolve_input(input: &str, cli: &Cli, jobs: &mut Vec<Job>) -> Result<()> {
     if is_glob(input) {
+        let base_dir = glob_base(input);
         for entry in glob::glob(input)? {
             let path = entry?;
             if path.is_file() {
-                add_file_job(&path, cli, jobs)?;
-            } else if path.is_dir() && cli.recursive {
-                collect_directory(&path, cli, jobs)?;
+                add_file_job(&path, Some(&base_dir), cli, jobs)?;
+            } else if path.is_dir() {
+                collect_directory(&path, cli.recursive, &base_dir, cli, jobs)?;
             }
         }
         return Ok(());
@@ -71,15 +73,9 @@ fn resolve_input(input: &str, cli: &Cli, jobs: &mut Vec<Job>) -> Result<()> {
 
     let path = PathBuf::from(input);
     if path.is_dir() {
-        if !cli.recursive {
-            return Err(CliError::Config(format!(
-                "{} is a directory; use --recursive to process directories",
-                path.display()
-            )));
-        }
-        collect_directory(&path, cli, jobs)?;
+        collect_directory(&path, cli.recursive, &path, cli, jobs)?;
     } else {
-        add_file_job(&path, cli, jobs)?;
+        add_file_job(&path, None, cli, jobs)?;
     }
     Ok(())
 }
@@ -88,15 +84,47 @@ fn is_glob(s: &str) -> bool {
     s.contains(['*', '?', '['])
 }
 
-fn collect_directory(dir: &Path, cli: &Cli, jobs: &mut Vec<Job>) -> Result<()> {
-    for entry in walkdir::WalkDir::new(dir)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+fn requests_batch_output(cli: &Cli) -> bool {
+    cli.inputs.len() != 1
+        || cli
+            .inputs
+            .iter()
+            .any(|input| is_glob(input) || Path::new(input).is_dir())
+}
+
+fn glob_base(pattern: &str) -> PathBuf {
+    let wildcard = pattern.find(['*', '?', '[']).unwrap_or(pattern.len());
+    let literal_prefix = &pattern[..wildcard];
+    let prefix = Path::new(literal_prefix);
+
+    if literal_prefix.ends_with('/') || literal_prefix.ends_with('\\') {
+        prefix.to_path_buf()
+    } else {
+        prefix
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+}
+
+fn collect_directory(
+    dir: &Path,
+    recursive: bool,
+    base_dir: &Path,
+    cli: &Cli,
+    jobs: &mut Vec<Job>,
+) -> Result<()> {
+    let walker = walkdir::WalkDir::new(dir).follow_links(false);
+    let walker = if recursive {
+        walker
+    } else {
+        walker.max_depth(1)
+    };
+
+    for entry in walker.into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() && is_html(path) {
-            add_file_job(path, cli, jobs)?;
+            add_file_job(path, Some(base_dir), cli, jobs)?;
         }
     }
     Ok(())
@@ -109,13 +137,16 @@ fn is_html(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn add_file_job(path: &Path, cli: &Cli, jobs: &mut Vec<Job>) -> Result<()> {
+fn add_file_job(
+    path: &Path,
+    base_dir: Option<&Path>,
+    cli: &Cli,
+    jobs: &mut Vec<Job>,
+) -> Result<()> {
     let html = read_html(path, cli.encoding.as_deref())?;
-    let base_dir = if path.is_dir() {
-        Some(path.to_path_buf())
-    } else {
-        path.parent().map(Path::to_path_buf)
-    };
+    let base_dir = base_dir
+        .map(Path::to_path_buf)
+        .or_else(|| path.parent().map(Path::to_path_buf));
     jobs.push(Job {
         input_path: Some(path.to_path_buf()),
         output_path: None,
@@ -160,17 +191,24 @@ pub fn assign_output_paths(jobs: &mut [Job], cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
-    // A single file without --output-dir writes to stdout (or -o if given).
-    if jobs.len() == 1 && cli.output_dir.is_none() {
+    let implicit_batch = cli.output.is_none() && requests_batch_output(cli);
+
+    // A single explicit file without batch intent writes to stdout (or -o).
+    if jobs.len() == 1 && cli.output_dir.is_none() && !implicit_batch {
         if let Some(out) = &cli.output {
             jobs[0].output_path = Some(out.clone());
         }
         return Ok(());
     }
 
-    let output_dir = cli.output_dir.as_ref().ok_or(CliError::OutputRequired)?;
+    let output_dir = cli
+        .output_dir
+        .as_deref()
+        .or_else(|| implicit_batch.then_some(Path::new(".")))
+        .ok_or(CliError::OutputRequired)?;
     fs::create_dir_all(output_dir)?;
 
+    let mut output_sources = HashMap::new();
     for job in jobs.iter_mut() {
         let Some(input) = &job.input_path else {
             continue;
@@ -186,6 +224,15 @@ pub fn assign_output_paths(jobs: &mut [Job], cli: &Cli) -> Result<()> {
                 .unwrap_or("output");
             output_dir.join(format!("{name}.md"))
         };
+
+        if let Some(previous) = output_sources.insert(out.clone(), input.clone()) {
+            return Err(CliError::Config(format!(
+                "{} and {} map to the same output {}; use --mirror to preserve directories",
+                previous.display(),
+                input.display(),
+                out.display()
+            )));
+        }
         job.output_path = Some(out);
     }
 

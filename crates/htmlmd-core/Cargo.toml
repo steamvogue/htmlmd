@@ -6,9 +6,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Core library for fast, configurable HTML to Markdown conversion."
+description = "Rust library for preparing clean, model-ready Markdown or text from HTML."
 readme = "../../README.md"
-keywords = ["html", "markdown", "converter", "commonmark"]
+keywords = ["html", "markdown", "ai", "rag", "converter"]
 categories = ["text-processing", "web-programming"]
 
 [features]

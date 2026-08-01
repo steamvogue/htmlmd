@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "htmlmd-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -885,7 +885,7 @@ dependencies = [
 
 [[package]]
 name = "htmlmd-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "ego-tree",
@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "htmlmd-server"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "htmlmd-core",

@@ -159,6 +159,133 @@ fn batch_output_dir() {
 }
 
 #[test]
+fn directory_input_defaults_to_cwd_and_reads_only_direct_html_files() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("page.html"), "<h1>HTML</h1>").unwrap();
+    fs::write(root.path().join("legacy.htm"), "<h1>HTM</h1>").unwrap();
+    fs::write(root.path().join("upper.HTML"), "<h1>Upper</h1>").unwrap();
+    fs::write(root.path().join("ignored.txt"), "<h1>Ignored</h1>").unwrap();
+    let nested = root.path().join("nested");
+    fs::create_dir(&nested).unwrap();
+    fs::write(nested.join("child.html"), "<h1>Nested</h1>").unwrap();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.current_dir(out_dir.path()).arg(root.path());
+    cmd.assert().success();
+
+    assert!(out_dir.path().join("page.md").exists());
+    assert!(out_dir.path().join("legacy.md").exists());
+    assert!(out_dir.path().join("upper.md").exists());
+    assert!(!out_dir.path().join("ignored.md").exists());
+    assert!(!out_dir.path().join("child.md").exists());
+}
+
+#[test]
+fn glob_input_defaults_to_cwd() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("matched.html"), "<h1>Matched</h1>").unwrap();
+    fs::write(root.path().join("excluded.htm"), "<h1>Excluded</h1>").unwrap();
+    let pattern = format!("{}/*.html", root.path().display()).replace('\\', "/");
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.current_dir(out_dir.path()).arg(pattern);
+    cmd.assert().success();
+
+    assert!(out_dir.path().join("matched.md").exists());
+    assert!(!out_dir.path().join("excluded.md").exists());
+}
+
+#[test]
+fn directory_input_recurses_only_when_requested() {
+    let root = tempfile::tempdir().unwrap();
+    let nested = root.path().join("nested");
+    fs::create_dir(&nested).unwrap();
+    fs::write(nested.join("child.htm"), "<h1>Nested</h1>").unwrap();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.current_dir(out_dir.path())
+        .arg(root.path())
+        .arg("--recursive");
+    cmd.assert().success();
+
+    let child = out_dir.path().join("child.md");
+    assert!(child.exists());
+    assert!(fs::read_to_string(child).unwrap().contains("# Nested"));
+}
+
+#[test]
+fn directory_with_one_file_honors_output_file() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("page.html"), "<h1>Page</h1>").unwrap();
+    let output = root.path().join("page.md");
+
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.arg(root.path()).arg("-o").arg(&output);
+    cmd.assert().success();
+
+    assert!(fs::read_to_string(output).unwrap().contains("# Page"));
+}
+
+#[test]
+fn directory_with_multiple_files_rejects_output_file() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("one.html"), "<h1>One</h1>").unwrap();
+    fs::write(root.path().join("two.htm"), "<h1>Two</h1>").unwrap();
+
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.arg(root.path())
+        .arg("-o")
+        .arg(root.path().join("combined.md"));
+    cmd.assert()
+        .failure()
+        .code(2)
+        .stderr(contains("output path required for multiple inputs"));
+}
+
+#[test]
+fn multiple_file_inputs_default_to_cwd() {
+    let root = tempfile::tempdir().unwrap();
+    let one = root.path().join("one.html");
+    let two = root.path().join("two.htm");
+    fs::write(&one, "<h1>One</h1>").unwrap();
+    fs::write(&two, "<h1>Two</h1>").unwrap();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.current_dir(out_dir.path()).arg(one).arg(two);
+    cmd.assert().success();
+
+    assert!(out_dir.path().join("one.md").exists());
+    assert!(out_dir.path().join("two.md").exists());
+}
+
+#[test]
+fn flat_batch_rejects_duplicate_output_names() {
+    let root = tempfile::tempdir().unwrap();
+    let first = root.path().join("first");
+    let second = root.path().join("second");
+    fs::create_dir(&first).unwrap();
+    fs::create_dir(&second).unwrap();
+    fs::write(first.join("page.html"), "<h1>First</h1>").unwrap();
+    fs::write(second.join("page.htm"), "<h1>Second</h1>").unwrap();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.current_dir(out_dir.path())
+        .arg(root.path())
+        .arg("--recursive");
+    cmd.assert()
+        .failure()
+        .code(2)
+        .stderr(contains("map to the same output"))
+        .stderr(contains("use --mirror"));
+    assert!(!out_dir.path().join("page.md").exists());
+}
+
+#[test]
 fn mirror_recursive_directory() {
     let root = tempfile::tempdir().unwrap();
     let sub = root.path().join("subdir");
@@ -167,16 +294,40 @@ fn mirror_recursive_directory() {
 
     let out_dir = tempfile::tempdir().unwrap();
     let mut cmd = Command::cargo_bin("htmlmd").unwrap();
-    cmd.arg("--recursive")
-        .arg("--mirror")
-        .arg("--output-dir")
-        .arg(out_dir.path())
-        .arg(&sub);
+    cmd.current_dir(out_dir.path())
+        .arg("--recursive")
+        .arg("-m")
+        .arg(root.path());
     cmd.assert().success();
 
-    let mirrored = out_dir.path().join("page.md");
+    let mirrored = out_dir.path().join("subdir/page.md");
     assert!(mirrored.exists(), "expected {}", mirrored.display());
     assert!(fs::read_to_string(&mirrored).unwrap().contains("# Nested"));
+}
+
+#[test]
+fn mirror_glob_uses_the_non_glob_prefix() {
+    let root = tempfile::tempdir().unwrap();
+    let nested = root.path().join("nested");
+    fs::create_dir(&nested).unwrap();
+    fs::write(nested.join("page.html"), "<h1>Nested glob</h1>").unwrap();
+    let pattern = format!("{}/**/*.html", root.path().display()).replace('\\', "/");
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let mut cmd = Command::cargo_bin("htmlmd").unwrap();
+    cmd.current_dir(out_dir.path())
+        .arg(pattern)
+        .arg("--mirror")
+        .arg("--recursive");
+    cmd.assert().success();
+
+    let mirrored = out_dir.path().join("nested/page.md");
+    assert!(mirrored.exists(), "expected {}", mirrored.display());
+    assert!(
+        fs::read_to_string(&mirrored)
+            .unwrap()
+            .contains("# Nested glob")
+    );
 }
 
 #[test]
